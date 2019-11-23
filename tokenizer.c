@@ -4,21 +4,21 @@
 
 FILE *in_ptr = NULL;
 FILE *out_ptr = NULL;
-char c = 0;
-short out_index = -1;
+uint8_t c = 0;
+uint16_t out_index = -1;
 
-bool is_whitespace(char c) {
+bool is_whitespace(uint8_t c) {
     return (c == ' ' || c == '\t')
         || (c == '\r' || c == '\n');
 }
 
-bool is_alphanumeric(char c) {
+bool is_alphanumeric(uint8_t c) {
     return (c >= 'a' && c <= 'z')
         || (c >= 'A' && c <= 'Z')
         || (c >= '0' && c <= '9');
 }
 
-bool is_math_op(char c) {
+bool is_math_op(uint8_t c) {
     return (c == '+' || c == '-' || c == '*' || c == '/')
         || (c == '|' || c == '&' || c == '^' || c == '%');
 }
@@ -40,12 +40,12 @@ void next_token(void) {
     }
 
     // symbols
-    char last = c;
+    uint8_t last = c;
     read();
     if (c == '=' && (is_math_op(last) || last == '=')) { read(); }
 }
 
-void output(short start_index, unsigned char length) {
+void output(uint16_t start_index, uint8_t length) {
     fputc(start_index % 256, out_ptr);
     fputc((start_index >> 8), out_ptr);
     fputc(length, out_ptr);
@@ -67,9 +67,9 @@ void output(short start_index, unsigned char length) {
 void tokenize(FILE* ptr) {
     in_ptr = ptr;
     read();
-    while (c != EOF) {
+    while (c != (uint8_t)EOF) {
         consume_whitespace();
-        short token_start = out_index;
+        uint16_t token_start = out_index;
         next_token();
         output(token_start, (out_index - token_start));
     }
