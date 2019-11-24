@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <string.h>
-#include <assert.h> 
+#include <assert.h>
 #include "symbols.h"
 #include "file.h"
 #include "nodes.h"
@@ -106,7 +106,7 @@ static void next_token() {
     fseek(src_ptr, start_index, 0);
     fgets(cur_token.string, length+1, src_ptr);
     cur_token.string[length] = NULL;
-    
+
     cur_token.next_index++;
 }
 
@@ -190,7 +190,7 @@ static void parse_factor(uint16_t pointer_offset) {
 
     DPRINT("<factor>", FALSE);
     INDENT(1);
- 
+
     // write to parent pointer
     write_current_offset_to(pointer_offset);
 
@@ -209,7 +209,7 @@ static void parse_factor(uint16_t pointer_offset) {
         value_str = peeked_token.string;
     }
 
-    if (is_numeric(value_str[0])) {        
+    if (is_numeric(value_str[0])) {
         // schedule/allocate constant
         future_push(NT_CONSTANT, ftell(ast_ptr));
         fput16(NULL, ast_ptr);
@@ -369,11 +369,11 @@ void parse(FILE* src_ptr_arg, FILE* tok_ptr_arg, FILE* out_ptr_arg) {
     src_ptr = src_ptr_arg;
     tok_ptr = tok_ptr_arg;
     ast_ptr = out_ptr_arg;
- 
+
     // read token info
     token_count = fget16(tok_ptr);
     next_token();
- 
+
     // allocate space for root pointer
     fput16(NULL, ast_ptr);
 

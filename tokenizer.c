@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <string.h>
-#include <assert.h> 
+#include <assert.h>
 #include "symbols.h"
 #include "file.h"
 
@@ -79,7 +79,7 @@ void tokenize(FILE* ptr) {
             output(token_start, length);
         }
     }
-    
+
     // write token count
     fseek(tok_ptr, 0, 0);
     fput16(token_count, tok_ptr);

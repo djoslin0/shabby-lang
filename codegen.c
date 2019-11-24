@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h> 
+#include <assert.h>
 #include "symbols.h"
 #include "file.h"
 #include "nodes.h"
@@ -146,7 +146,7 @@ void gen(FILE* src_ptr_arg, FILE* ast_ptr_arg, FILE* gen_ptr_arg) {
     src_ptr = src_ptr_arg;
     ast_ptr = ast_ptr_arg;
     gen_ptr = gen_ptr_arg;
- 
+
     // move to root node
     future_push(fget16(ast_ptr));
 
