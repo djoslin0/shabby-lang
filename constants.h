@@ -18,6 +18,7 @@
 #endif
 
 #define MAX_TOKEN_LEN 32
+#define FUTURE_STACK_SIZE 100
 
 // required because pedantic mode is on
 extern bool make_iso_compilers_happy;

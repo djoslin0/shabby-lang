@@ -3,22 +3,7 @@
 #include <assert.h> 
 #include "symbols.h"
 #include "file.h"
-
-enum {
-    NT_NONE,
-    NT_ROOT,
-    NT_EXPRESSION,
-    NT_EXPRESSION_OP,
-    NT_EXPRESSION_PAREN,
-    NT_TERM,
-    NT_TERM_OP,
-    NT_FACTOR,
-    NT_UNARY_OP,
-    NT_CONSTANT,
-    #ifdef DEBUG
-    NT_DEBUG_UNINDENT_NODE,
-    #endif
-} typedef node_type;
+#include "nodes.h"
 
   ///////////////////
  // file pointers //
@@ -50,18 +35,17 @@ struct {
     uint16_t write_offset;
 } typedef future_node;
 
-#define FUTURE_STACK_SIZE 100
 static future_node future_stack[FUTURE_STACK_SIZE] = { 0 };
 static uint16_t future_stack_count = 0;
 
-void future_push(node_type node, uint16_t write_offset) {
+static void future_push(node_type node, uint16_t write_offset) {
     future_stack[future_stack_count].node = node;
     future_stack[future_stack_count].write_offset = write_offset;
     future_stack_count++;
     assert(future_stack_count < FUTURE_STACK_SIZE);
 }
 
-future_node future_pop(void) {
+static future_node future_pop(void) {
     assert(future_stack_count > 0);
     future_stack_count--;
     return future_stack[future_stack_count];
