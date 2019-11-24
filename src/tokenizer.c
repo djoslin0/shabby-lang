@@ -15,7 +15,7 @@ static uint16_t c_index = -1; // index of the current character
 // read the next character, output why we've advanced in debug mode
 #ifdef DEBUG
     static void read(char* reason) {
-        printf("%s: %c\n", reason, c);
+        printf("%s  %c\n", reason, c);
         c = fgetc(src_ptr);
         c_index++;
     }
@@ -58,6 +58,15 @@ static void output(uint16_t start_index, uint8_t length) {
 
 void tokenize(FILE* ptr) {
     src_ptr = ptr;
+
+    // print header for why we consumed certain chars
+    #ifdef DEBUG
+        printf("\n");
+        printf("rsn c\n");
+        printf("--- -\n");
+    #endif
+
+    // consume first character
     read(DBG_STR("st"));
 
     // allocate space for token count

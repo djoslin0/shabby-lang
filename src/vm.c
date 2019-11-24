@@ -57,6 +57,13 @@ static void vm_div(void) { eval_push(eval_pop() / eval_pop()); }
 void vm(FILE* gen_ptr_arg) {
     gen_ptr = gen_ptr_arg;
 
+    // print vm header
+    #ifdef DEBUG
+        printf("\n");
+        printf("executed\n");
+        printf("--------\n");
+    #endif
+
     while (TRUE) {
         bytecode_t type = fgetc(gen_ptr);
         if (type == (bytecode_t)EOF) { break; }
