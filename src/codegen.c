@@ -2,9 +2,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <stdarg.h>
 #include "symbols.h"
 #include "file.h"
 #include "nodes.h"
+#include "bytecode.h"
 
   ///////////////////
  // file pointers //
@@ -22,35 +24,6 @@ static char token[MAX_TOKEN_LEN];
 static void read_token(void) {
     memset(token, NULL, MAX_TOKEN_LEN);
     fgets(token, MAX_TOKEN_LEN, ast_ptr);
-}
-
-  //////////////////////
- // evaluation stack //
-//////////////////////
-
-// TODO: Remove all evaluation stack stuff, it needs to be done in the next stage
-static uint16_t eval_stack[32];
-static uint16_t eval_stack_count = 0;
-
-static void eval_push(uint16_t offset) {
-    if (offset == NULL) { return; }
-    eval_stack[eval_stack_count] = offset;
-    eval_stack_count++;
-    assert(eval_stack_count < 32);
-}
-
-static uint16_t eval_pop(void) {
-    assert(eval_stack_count > 0);
-    eval_stack_count--;
-    return eval_stack[eval_stack_count];
-}
-
-static void output_eval_stack(void) {
-    printf("\t  >>  ");
-    for (int i = 0; i < eval_stack_count; i++) {
-        printf("%d ", (int16_t)eval_stack[i]);
-    }
-    printf("\n");
 }
 
   ////////////////////////////
@@ -73,21 +46,48 @@ static uint16_t future_pop(void) {
     return future_stack[future_stack_count];
 }
 
+  ////////////
+ // output //
+////////////
+
+static void output(bytecode_t type, ...) {
+    // output type
+    fputc(type, gen_ptr);
+    #ifdef DEBUG
+        printf("%s", bytecode[type].name);
+    #endif
+
+    // output params
+    if (bytecode[type].params > 0) {
+        va_list args;
+        va_start(args, type);
+        for (uint8_t i = 0; i < bytecode[type].params; i++) {
+            uint16_t param = (uint16_t)va_arg(args, int);
+            fput16(param, gen_ptr);
+            #ifdef DEBUG
+                printf(" %d", param);
+            #endif
+        }
+        va_end(args);
+    }
+    #ifdef DEBUG
+        printf("\n");
+    #endif
+}
+
   /////////////////////
  // code generation //
 /////////////////////
 
 static void gen_constant(void) {
     read_token();
-    printf("push %s", token);
-    eval_push(atoi(token));
-    output_eval_stack();
+    output(BC_PUSH, (uint16_t)atoi(token));
 }
 
 static void gen_unary_op(void) {
     read_token();
     switch (token[0]) {
-        case '-': printf("neg"); eval_push(-eval_pop()); output_eval_stack(); break;
+        case '-': output(BC_NEG); break;
         default: assert(FALSE); break;
     }
 }
@@ -102,8 +102,8 @@ static void gen_factor(void) {
 static void gen_term_op(void) {
     read_token();
     switch (token[0]) {
-        case '*': printf("mul"); eval_push(eval_pop() * eval_pop()); output_eval_stack(); break;
-        case '/': printf("div"); eval_push(eval_pop() / eval_pop()); output_eval_stack(); break;
+        case '*': output(BC_MUL); break;
+        case '/': output(BC_DIV); break;
         default: assert(FALSE); break;
     }
 }
@@ -120,8 +120,8 @@ static void gen_term(void) {
 static void gen_expression_op(void) {
     read_token();
     switch (token[0]) {
-        case '+': printf("add"); eval_push(eval_pop() + eval_pop()); output_eval_stack(); break;
-        case '-': printf("sub"); eval_push(eval_pop() - eval_pop()); output_eval_stack(); break;
+        case '+': output(BC_ADD); break;
+        case '-': output(BC_SUB); break;
         default: assert(FALSE); break;
     }
 }
@@ -163,22 +163,29 @@ void gen(FILE* src_ptr_arg, FILE* ast_ptr_arg, FILE* gen_ptr_arg) {
             default: assert(FALSE); break;
        }
     }
-
-    printf("\n");
-    printf("final output\n");
-    printf("------------\n");
-    output_eval_stack();
 }
 
   //////////
  // main //
 //////////
 
-int main(void) {
-    src_ptr = fopen("../examples/expression.bs", "r");
-    ast_ptr = fopen("../bin/expression.ast", "r");
-    gen_ptr = fopen("../bin/expression.bin", "w");
+int main(int argc, char *argv[]) {
+    assert(argc == 2);
+
+    char src_buffer[128] = { 0 };
+    sprintf(src_buffer, "../examples/%s.src", argv[1]);
+    src_ptr = fopen(src_buffer, "r");
+
+    char ast_buffer[128] = { 0 };
+    sprintf(ast_buffer, "../bin/%s.ast", argv[1]);
+    ast_ptr = fopen(ast_buffer, "r");
+
+    char gen_buffer[128] = { 0 };
+    sprintf(gen_buffer, "../bin/%s.gen", argv[1]);
+    gen_ptr = fopen(gen_buffer, "w+");
+
     gen(src_ptr, ast_ptr, gen_ptr);
+
     fclose(src_ptr);
     fclose(ast_ptr);
     fclose(gen_ptr);

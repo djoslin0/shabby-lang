@@ -404,11 +404,23 @@ void parse(FILE* src_ptr_arg, FILE* tok_ptr_arg, FILE* out_ptr_arg) {
  // main //
 //////////
 
-int main(void) {
-    src_ptr = fopen("../examples/expression.bs", "r");
-    tok_ptr = fopen("../bin/expression.tok", "r");
-    ast_ptr = fopen("../bin/expression.ast", "w");
+int main(int argc, char *argv[]) {
+    assert(argc == 2);
+
+    char src_buffer[128] = { 0 };
+    sprintf(src_buffer, "../examples/%s.src", argv[1]);
+    src_ptr = fopen(src_buffer, "r");
+
+    char tok_buffer[128] = { 0 };
+    sprintf(tok_buffer, "../bin/%s.tok", argv[1]);
+    tok_ptr = fopen(tok_buffer, "r");
+
+    char ast_buffer[128] = { 0 };
+    sprintf(ast_buffer, "../bin/%s.ast", argv[1]);
+    ast_ptr = fopen(ast_buffer, "w+");
+
     parse(src_ptr, tok_ptr, ast_ptr);
+
     fclose(src_ptr);
     fclose(tok_ptr);
     fclose(ast_ptr);

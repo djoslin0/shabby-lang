@@ -22,7 +22,7 @@ static uint16_t c_index = -1; // index of the current character
 #else
     static void read(void) {
         c = fgetc(src_ptr);
-        out_index++;
+        c_index++;
     }
 #endif
 
@@ -105,10 +105,19 @@ void tokenize(FILE* ptr) {
     #endif
 }
 
-int main(void) {
-    src_ptr = fopen("../examples/expression.bs", "r");
-    tok_ptr = fopen("../bin/expression.tok", "w+");
+int main(int argc, char *argv[]) {
+    assert(argc == 2);
+
+    char src_buffer[128] = { 0 };
+    sprintf(src_buffer, "../examples/%s.src", argv[1]);
+    src_ptr = fopen(src_buffer, "r");
+
+    char tok_buffer[128] = { 0 };
+    sprintf(tok_buffer, "../bin/%s.tok", argv[1]);
+    tok_ptr = fopen(tok_buffer, "w+");
+
     tokenize(src_ptr);
+
     fclose(tok_ptr);
     fclose(src_ptr);
     return 0;
