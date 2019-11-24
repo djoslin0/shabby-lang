@@ -1,88 +1,115 @@
 #include <stdio.h>
 #include <string.h>
-#include "constants.h"
+#include <assert.h> 
+#include "symbols.h"
+#include "file.h"
 
-FILE *in_ptr = NULL;
-FILE *out_ptr = NULL;
-uint8_t c = 0;
-uint16_t out_index = -1;
+// file pointers
+static FILE *src_ptr = NULL; // source code
+static FILE *tok_ptr = NULL; // output
 
-bool is_whitespace(uint8_t c) {
-    return (c == ' ' || c == '\t')
-        || (c == '\r' || c == '\n');
+// input state
+static uint8_t c = 0; // current character
+static uint16_t c_index = -1; // index of the current character
+
+// read the next character, output why we've advanced in debug mode
+#ifdef DEBUG
+    static void read(char* reason) {
+        printf("%s: %c\n", reason, c);
+        c = fgetc(src_ptr);
+        c_index++;
+    }
+#else
+    static void read(void) {
+        c = fgetc(src_ptr);
+        out_index++;
+    }
+#endif
+
+static void consume_whitespace(void) {
+    while (is_whitespace(c)) { read(DBG_STR("ws")); }
 }
 
-bool is_alphanumeric(uint8_t c) {
-    return (c >= 'a' && c <= 'z')
-        || (c >= 'A' && c <= 'Z')
-        || (c >= '0' && c <= '9');
-}
+static void next_token(void) {
+    // EOF
+    if (c == (uint8_t)EOF) { return; }
 
-bool is_math_op(uint8_t c) {
-    return (c == '+' || c == '-' || c == '*' || c == '/')
-        || (c == '|' || c == '&' || c == '^' || c == '%');
-}
-
-void read(void) {
-    c = fgetc(in_ptr);
-    out_index++;
-}
-
-void consume_whitespace(void) {
-    while (is_whitespace(c)) { read(); }
-}
-
-void next_token(void) {
-    // identifiers
-    if (is_alphanumeric(c)) {
-        while (is_alphanumeric(c) || (c == '_')) { read(); }
+    // identifiers [a-zA-Z_][0-9a-zA-Z_]+
+    if (is_alphanumeric(c) || (c == '_')) {
+        while (is_alphanumeric(c) || (c == '_')) {
+            read(DBG_STR("an"));
+        }
         return;
     }
 
     // symbols
     uint8_t last = c;
-    read();
-    if (c == '=' && (is_math_op(last) || last == '=')) { read(); }
-}
-
-void output(uint16_t start_index, uint8_t length) {
-    fputc(start_index % 256, out_ptr);
-    fputc((start_index >> 8), out_ptr);
-    fputc(length, out_ptr);
-
-    #ifdef DEBUG
-        printf("%02X %02X %02X   ",
-               start_index % 256,
-               (start_index >> 8) % 256,
-               length);
-        fseek(in_ptr, start_index, 0);
-        char buffer[length + 1];
-        fgets(buffer, length + 1, in_ptr);
-        buffer[length] = 0;
-        printf("'%s' \n", buffer);
-        fseek(in_ptr, length + 1, start_index);
-    #endif
-}
-
-void tokenize(FILE* ptr) {
-    in_ptr = ptr;
-    read();
-    while (c != (uint8_t)EOF) {
-        consume_whitespace();
-        uint16_t token_start = out_index;
-        next_token();
-        output(token_start, (out_index - token_start));
+    read(DBG_STR("sy"));
+    if (c == '=' && (is_math_op(last) || last == '=')) {
+        read(DBG_STR("sy"));
     }
 }
 
-int main(void) {
+static void output(uint16_t start_index, uint8_t length) {
+    fput16(start_index, tok_ptr);
+    fputc(length, tok_ptr);
+    assert(length <= MAX_TOKEN_LEN);
+}
+
+void tokenize(FILE* ptr) {
+    src_ptr = ptr;
+    read(DBG_STR("st"));
+
+    // allocate space for token count
+    fput16(0, tok_ptr);
+
+    uint16_t token_count = 0;
+    while (c != (uint8_t)EOF) {
+        // ignore all whitespace
+        consume_whitespace();
+
+        // read token and remember start/length
+        uint16_t token_start = c_index;
+        next_token();
+        uint16_t length = (c_index - token_start);
+
+        // output if token has length
+        if (length > 0) {
+            token_count++;
+            output(token_start, length);
+        }
+    }
+    
+    // write token count
+    fseek(tok_ptr, 0, 0);
+    fput16(token_count, tok_ptr);
+
+    // print out entire file
     #ifdef DEBUG
-        printf("offsets    token\n");
+        printf("\n");
+        printf("raw       token\n");
+        printf("--------  ----------------\n");
+        for (uint16_t i = 0; i < token_count; i++) {
+            // print raw token offsets
+            uint16_t start_index = fget16(tok_ptr);
+            uint8_t length = fgetc(tok_ptr);
+            printf("%02X %02X %02X", (start_index >> 8), (start_index % 256), length);
+
+            // print src token string
+            char buffer[length + 1];
+            fseek(src_ptr, start_index, 0);
+            fgets(buffer, length + 1, src_ptr);
+            buffer[length] = NULL;
+            printf("  %s\n", buffer);
+        }
     #endif
-    in_ptr = fopen("examples/expression.bs", "r");
-    out_ptr = fopen("out/a.tok", "w");
-    tokenize(in_ptr);
-    fclose(out_ptr);
-    fclose(in_ptr);
+}
+
+int main(void) {
+    src_ptr = fopen("examples/expression.bs", "r");
+    tok_ptr = fopen("out/expression.tok", "w+");
+    tokenize(src_ptr);
+    fclose(tok_ptr);
+    fclose(src_ptr);
     return 0;
 }
