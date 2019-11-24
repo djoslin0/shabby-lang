@@ -106,8 +106,8 @@ void tokenize(FILE* ptr) {
 }
 
 int main(void) {
-    src_ptr = fopen("examples/expression.bs", "r");
-    tok_ptr = fopen("out/expression.tok", "w+");
+    src_ptr = fopen("../examples/expression.bs", "r");
+    tok_ptr = fopen("../bin/expression.tok", "w+");
     tokenize(src_ptr);
     fclose(tok_ptr);
     fclose(src_ptr);

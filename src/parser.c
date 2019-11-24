@@ -405,9 +405,9 @@ void parse(FILE* src_ptr_arg, FILE* tok_ptr_arg, FILE* out_ptr_arg) {
 //////////
 
 int main(void) {
-    src_ptr = fopen("examples/expression.bs", "r");
-    tok_ptr = fopen("out/expression.tok", "r");
-    ast_ptr = fopen("out/expression.ast", "w");
+    src_ptr = fopen("../examples/expression.bs", "r");
+    tok_ptr = fopen("../bin/expression.tok", "r");
+    ast_ptr = fopen("../bin/expression.ast", "w");
     parse(src_ptr, tok_ptr, ast_ptr);
     fclose(src_ptr);
     fclose(tok_ptr);

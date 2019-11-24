@@ -175,9 +175,9 @@ void gen(FILE* src_ptr_arg, FILE* ast_ptr_arg, FILE* gen_ptr_arg) {
 //////////
 
 int main(void) {
-    src_ptr = fopen("examples/expression.bs", "r");
-    ast_ptr = fopen("out/expression.ast", "r");
-    gen_ptr = fopen("out/expression.bin", "w");
+    src_ptr = fopen("../examples/expression.bs", "r");
+    ast_ptr = fopen("../bin/expression.ast", "r");
+    gen_ptr = fopen("../bin/expression.bin", "w");
     gen(src_ptr, ast_ptr, gen_ptr);
     fclose(src_ptr);
     fclose(ast_ptr);
