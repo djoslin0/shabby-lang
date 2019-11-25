@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include "constants.h"
 
 bool is_whitespace(uint8_t c) {
@@ -39,4 +40,10 @@ bool is_binary_op(uint8_t c) {
 
 bool is_unary_op(uint8_t c) {
     return (c == '-');
+}
+
+bool is_identifier(char* str) {
+    if (!is_alpha(*str) && *str != '_') { return FALSE; }
+    while (is_alpha(*str) || *str == '_') { str++; }
+    return (*str == NULL);
 }

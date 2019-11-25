@@ -12,5 +12,6 @@ bool is_term_op(uint8_t);
 bool is_expression_op(uint8_t);
 bool is_binary_op(uint8_t);
 bool is_unary_op(uint8_t);
+bool is_identifier(char*);
 
 #endif

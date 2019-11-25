@@ -11,19 +11,42 @@ struct {
 } typedef bytecode_s;
 
 enum {
+    // misc
     BC_NOOP = 0,
+
+    // stack
     BC_PUSH,
+    BC_POP,
+
+    // pointers
+    BC_SET,
+    BC_GET,
+
+    // math
     BC_NEG,
     BC_ADD,
     BC_SUB,
     BC_MUL,
     BC_DIV,
+
+    // misc
     BC_EOF = EOF,
+
 } typedef bytecode_t;
 
 static bytecode_s bytecode[] = {
+    // misc
     [BC_NOOP] = { 0, DBG_STR("noop") },
+
+    // stack
     [BC_PUSH] = { 1, DBG_STR("push") },
+    [BC_POP] = { 0, DBG_STR("pop") },
+
+    // pointers
+    [BC_SET] = { 0, DBG_STR("set") },
+    [BC_GET] = { 0, DBG_STR("get") },
+
+    // math
     [BC_NEG] = { 0, DBG_STR("neg") },
     [BC_ADD] = { 0, DBG_STR("add") },
     [BC_SUB] = { 0, DBG_STR("sub") },

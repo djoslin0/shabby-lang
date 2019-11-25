@@ -8,6 +8,8 @@
 #include "nodes.h"
 #include "bytecode.h"
 
+#define SCHEDULE_RAW_BYTECODE ((uint16_t)-1)
+
   ///////////////////
  // file pointers //
 ///////////////////
@@ -16,14 +18,87 @@ static FILE *src_ptr = NULL; // source code
 static FILE *ast_ptr = NULL; // abstract syntax tree
 static FILE *gen_ptr = NULL; // output
 
-  //////////
- // misc //
-//////////
-static char token[MAX_TOKEN_LEN];
+  /////////////////////
+ // token utilities //
+/////////////////////
 
+static char token[MAX_TOKEN_LEN];
 static void read_token(void) {
+    int last_position = ftell(ast_ptr);
     memset(token, NULL, MAX_TOKEN_LEN);
     fgets(token, MAX_TOKEN_LEN, ast_ptr);
+    assert(strlen(token) < MAX_TOKEN_LEN);
+    fseek(ast_ptr, last_position + strlen(token) + 1, 0);
+}
+
+  ///////////
+ // types //
+///////////
+
+struct {
+    uint16_t size;
+    char name[MAX_TOKEN_LEN];
+} typedef type_s;
+
+type_s types[] = {
+    { .size = 0, .name = "void" },
+    { .size = 2, .name = "short" },
+};
+
+static type_s* get_type(char* s) {
+    uint16_t types_count = sizeof(types) / sizeof(type_s);
+    for (int i = 0; i < types_count; i++) {
+        if (!strcmp(s, types[i].name)) { return &types[i]; }
+    }
+    return NULL;
+}
+
+  ///////////////
+ // variables //
+///////////////
+
+#define MAX_VARS_IN_SCOPE 64
+struct {
+    type_s* type;
+    char name[MAX_TOKEN_LEN];
+    uint8_t scope;
+    uint8_t address;
+} typedef var_s;
+
+var_s vars[MAX_VARS_IN_SCOPE] = { 0 };
+uint16_t vars_count = 0;
+
+static var_s* get_variable(char* name) {
+    for (int i = vars_count - 1; i >= 0; i--) {
+        if (!strcmp(name, vars[i].name)) { return &vars[i]; }
+    }
+    return NULL;
+}
+
+static uint16_t store_variable(type_s* type, char* name, uint8_t scope) {
+    assert(vars_count < MAX_VARS_IN_SCOPE);
+
+    // store type
+    vars[vars_count].type = type;
+
+    // store name
+    memset(vars[vars_count].name, NULL, MAX_TOKEN_LEN);
+    strcpy(vars[vars_count].name, name);
+
+    // store scope
+    vars[vars_count].scope = scope;
+
+    // calculate and store address
+    uint16_t address = 0;
+    if (vars_count > 0) {
+        address = vars[vars_count - 1].address + vars[vars_count - 1].type->size;
+    }
+    vars[vars_count].address = address;
+
+    // increment
+    vars_count++;
+
+    return address;
 }
 
   ////////////////////////////
@@ -38,6 +113,11 @@ static void future_push(uint16_t offset) {
     future_stack[future_stack_count] = offset;
     future_stack_count++;
     assert(future_stack_count < FUTURE_STACK_SIZE);
+}
+
+static void future_push_bytecode(bytecode_t bc) {
+    future_push(bc);
+    future_push(SCHEDULE_RAW_BYTECODE);
 }
 
 static uint16_t future_pop(void) {
@@ -135,6 +215,33 @@ static void gen_expression(void) {
     future_push(right_term);
 }
 
+static void gen_declaration(void) {
+    // variable type
+    read_token();
+    type_s* type = get_type(token);
+    assert(type != NULL);
+
+    // variable identifier
+    read_token();
+    var_s* var = get_variable(token);
+    assert(var == NULL);
+
+    uint16_t addr = store_variable(type, token, 0);
+
+    // allocate space
+    output(BC_PUSH, 0);
+
+    // push pointer
+    output(BC_PUSH, addr);
+
+    // schedule set
+    future_push_bytecode(BC_SET);
+
+    // schedule expression
+    uint16_t expression = fget16(ast_ptr);
+    future_push(expression);
+}
+
 void gen(FILE* src_ptr_arg, FILE* ast_ptr_arg, FILE* gen_ptr_arg) {
     #ifdef DEBUG
         // print debug header
@@ -150,9 +257,20 @@ void gen(FILE* src_ptr_arg, FILE* ast_ptr_arg, FILE* gen_ptr_arg) {
     // move to root node
     future_push(fget16(ast_ptr));
 
-    while(future_stack_count > 0) {
-        fseek(ast_ptr, future_pop(), 0);
+    int bail = 0;
+    while(future_stack_count > 0 && ++bail < 1000) {
+        uint16_t offset = future_pop();
+
+        // check for raw bytecode output
+        if (offset == SCHEDULE_RAW_BYTECODE) {
+            output(future_pop());
+            continue;
+        }
+
+        // navigate to offset and parse node
+        fseek(ast_ptr, offset, 0);
         switch(fgetc(ast_ptr)) {
+            case NT_DECLARATION: gen_declaration(); break;
             case NT_EXPRESSION: gen_expression(); break;
             case NT_EXPRESSION_OP: gen_expression_op(); break;
             case NT_TERM: gen_term(); break;
@@ -163,6 +281,7 @@ void gen(FILE* src_ptr_arg, FILE* ast_ptr_arg, FILE* gen_ptr_arg) {
             default: assert(FALSE); break;
        }
     }
+    assert(bail < 1000);
 }
 
   //////////

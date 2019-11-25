@@ -47,7 +47,19 @@ static uint16_t eval_pop(void) {
  // vm functions //
 //////////////////
 
+// stack
 static void vm_push(void) { eval_push(fget16(gen_ptr)); }
+static void vm_pop(void) { fget16(gen_ptr); }
+
+// pointers
+static void vm_get(void) { eval_push(eval_stack[eval_pop()]); }
+static void vm_set(void) {
+    uint16_t value = eval_pop();
+    uint16_t address = eval_pop();
+    eval_stack[address] = value;
+}
+
+// math
 static void vm_neg(void) { eval_push(-eval_pop()); }
 static void vm_add(void) { eval_push(eval_pop() + eval_pop()); }
 static void vm_sub(void) { eval_push(eval_pop() - eval_pop()); }
@@ -69,8 +81,18 @@ void vm(FILE* gen_ptr_arg) {
         if (type == (bytecode_t)EOF) { break; }
 
         switch (type) {
+            // misc
             case BC_NOOP: break;
+
+            // stack
             case BC_PUSH: vm_push(); break;
+            case BC_POP: vm_pop(); break;
+
+            // pointers
+            case BC_GET: vm_get(); break;
+            case BC_SET: vm_set(); break;
+
+            // math
             case BC_NEG: vm_neg(); break;
             case BC_ADD: vm_add(); break;
             case BC_SUB: vm_sub(); break;
