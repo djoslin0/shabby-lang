@@ -164,6 +164,15 @@ static void gen_constant(void) {
     output(BC_PUSH, (uint16_t)atoi(token));
 }
 
+static void gen_variable(void) {
+    read_token();
+
+    var_s* var = get_variable(token);
+    assert(var != NULL);
+
+    output(BC_IGET, var->address);
+}
+
 static void gen_unary_op(void) {
     read_token();
     switch (token[0]) {
@@ -275,7 +284,8 @@ void gen(FILE* src_ptr_arg, FILE* ast_ptr_arg, FILE* gen_ptr_arg) {
 
         // navigate to offset and parse node
         fseek(ast_ptr, offset, 0);
-        switch(fgetc(ast_ptr)) {
+        node_type type = fgetc(ast_ptr);
+        switch(type) {
             case NT_STATEMENT: gen_statement(); break;
             case NT_DECLARATION: gen_declaration(); break;
             case NT_EXPRESSION: gen_expression(); break;
@@ -284,6 +294,7 @@ void gen(FILE* src_ptr_arg, FILE* ast_ptr_arg, FILE* gen_ptr_arg) {
             case NT_TERM_OP: gen_term_op(); break;
             case NT_FACTOR: gen_factor(); break;
             case NT_UNARY_OP: gen_unary_op(); break;
+            case NT_VARIABLE: gen_variable(); break;
             case NT_CONSTANT: gen_constant(); break;
             default: assert(FALSE); break;
        }

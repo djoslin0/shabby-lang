@@ -17,6 +17,7 @@ enum {
     NT_TERM_OP,
     NT_FACTOR,
     NT_UNARY_OP,
+    NT_VARIABLE,
     NT_CONSTANT,
 
     // Debug

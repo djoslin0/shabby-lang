@@ -165,6 +165,32 @@ static void parse_constant(uint16_t pointer_offset) {
     next_token();
 }
 
+static void parse_variable(uint16_t pointer_offset) {
+    // <variable> ::= ( '[a-zA-Z_][a-zA-Z0-9_]*' )
+    // output: <type> <token>
+
+    // validate identifier
+    assert(is_alpha(cur_token.string[0]) || cur_token.string[0] == '_');
+    for (uint8_t i = 0; i < MAX_TOKEN_LEN; i++) {
+        if (cur_token.string[i] == NULL) { break; }
+        assert(is_alphanumeric(cur_token.string[i]) || cur_token.string[i] == '_');
+    }
+
+    DPRINT("variable", TRUE);
+
+    // write to parent pointer
+    write_current_offset_to(pointer_offset);
+
+    // output type
+    fputc(NT_VARIABLE, ast_ptr);
+
+    // output token
+    fputs(cur_token.string, ast_ptr);
+    fputc(NULL, ast_ptr);
+
+    next_token();
+}
+
 static void parse_unary_op(uint16_t pointer_offset) {
     // <unary_op> ::= ( '-' )
     // output: <type> <token>
@@ -189,8 +215,8 @@ static void parse_unary_op(uint16_t pointer_offset) {
 }
 
 static void parse_factor(uint16_t pointer_offset) {
-    // <factor> ::= [ <unary_op> ] ( <constant> | '(' <expression> ')' )
-    // output: <type> <*constant | *expression> <*unary_op>
+    // <factor> ::= [ <unary_op> ] ( <constant> | '(' <expression> ')' | <variable> )
+    // output: <type> <*constant | *expression | *variable> <*unary_op>
 
     DPRINT("<factor>", FALSE);
     INDENT(1);
@@ -226,8 +252,9 @@ static void parse_factor(uint16_t pointer_offset) {
         future_push(NT_EXPRESSION, ftell(ast_ptr), NULL);
         fput16(NULL, ast_ptr);
     } else {
-        // unmatched
-        assert(FALSE);
+        // schedule/allocate variable
+        future_push(NT_VARIABLE, ftell(ast_ptr), NULL);
+        fput16(NULL, ast_ptr);
     }
 
     // schedule/allocate unary_op
@@ -484,6 +511,7 @@ void parse(FILE* src_ptr_arg, FILE* tok_ptr_arg, FILE* out_ptr_arg) {
             case NT_TERM_OP: parse_term_op(n.write_offset); break;
             case NT_FACTOR: parse_factor(n.write_offset); break;
             case NT_UNARY_OP: parse_unary_op(n.write_offset); break;
+            case NT_VARIABLE: parse_variable(n.write_offset); break;
             case NT_CONSTANT: parse_constant(n.write_offset); break;
             #ifdef DEBUG
             case NT_DEBUG_UNINDENT_NODE: INDENT(-1); break;

@@ -52,6 +52,7 @@ static void vm_push(void) { eval_push(fget16(gen_ptr)); }
 static void vm_pop(void) { fget16(gen_ptr); }
 
 // pointers
+static void vm_iget(void) { eval_push(eval_stack[fget16(gen_ptr)]); }
 static void vm_get(void) { eval_push(eval_stack[eval_pop()]); }
 static void vm_set(void) {
     uint16_t value = eval_pop();
@@ -91,6 +92,7 @@ void vm(FILE* gen_ptr_arg) {
 
             // pointers
             case BC_GET: vm_get(); break;
+            case BC_IGET: vm_iget(); break;
             case BC_SET: vm_set(); break;
 
             // math

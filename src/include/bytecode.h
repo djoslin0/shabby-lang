@@ -21,6 +21,7 @@ enum {
     // pointers
     BC_SET,
     BC_GET,
+    BC_IGET,
 
     // math
     BC_NEG,
@@ -45,6 +46,7 @@ static bytecode_s bytecode[] = {
     // pointers
     [BC_SET] = { 0, DBG_STR("set") },
     [BC_GET] = { 0, DBG_STR("get") },
+    [BC_IGET] = { 1, DBG_STR("iget") },
 
     // math
     [BC_NEG] = { 0, DBG_STR("neg") },
