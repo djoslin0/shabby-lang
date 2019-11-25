@@ -284,7 +284,7 @@ void gen(FILE* src_ptr_arg, FILE* ast_ptr_arg, FILE* gen_ptr_arg) {
 
         // navigate to offset and parse node
         fseek(ast_ptr, offset, 0);
-        node_type type = fgetc(ast_ptr);
+        node_t type = fgetc(ast_ptr);
         switch(type) {
             case NT_STATEMENT: gen_statement(); break;
             case NT_DECLARATION: gen_declaration(); break;

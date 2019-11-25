@@ -20,10 +20,10 @@ static FILE *ast_ptr = NULL; // output
 struct {
     char string[MAX_TOKEN_LEN+1];
     uint16_t next_index;
-} typedef token;
+} typedef token_s;
 
-static token cur_token = { 0 }; // the current token being evaluated
-static token peeked_token = { 0 }; // the token we last peeked at
+static token_s cur_token = { 0 }; // the current token being evaluated
+static token_s peeked_token = { 0 }; // the token we last peeked at
 static uint16_t token_count = 0; // the total number of tokens
 
   ////////////////////////////
@@ -33,15 +33,15 @@ static uint16_t token_count = 0; // the total number of tokens
 #define FUTURE_FLAG_STATEMENTS (1 << 0)
 
 struct {
-    node_type node;
+    node_t node;
     uint16_t write_offset;
     uint8_t flags;
-} typedef future_node;
+} typedef future_node_s;
 
-static future_node future_stack[FUTURE_STACK_SIZE] = { 0 };
+static future_node_s future_stack[FUTURE_STACK_SIZE] = { 0 };
 static uint16_t future_stack_count = 0;
 
-static void future_push(node_type node, uint16_t write_offset, uint8_t flags) {
+static void future_push(node_t node, uint16_t write_offset, uint8_t flags) {
     future_stack[future_stack_count].node = node;
     future_stack[future_stack_count].write_offset = write_offset;
     future_stack[future_stack_count].flags = flags;
@@ -49,7 +49,7 @@ static void future_push(node_type node, uint16_t write_offset, uint8_t flags) {
     assert(future_stack_count < FUTURE_STACK_SIZE);
 }
 
-static future_node future_pop(void) {
+static future_node_s future_pop(void) {
     assert(future_stack_count > 0);
     future_stack_count--;
     return future_stack[future_stack_count];
@@ -499,7 +499,7 @@ void parse(FILE* src_ptr_arg, FILE* tok_ptr_arg, FILE* out_ptr_arg) {
     future_push(NT_STATEMENT_LIST, 0, NULL);
 
     while(future_stack_count > 0 && cur_token.next_index < token_count) {
-        future_node n = future_pop();
+        future_node_s n = future_pop();
         switch(n.node) {
             case NT_CONSUME: parse_consume((char)n.write_offset); break;
             case NT_STATEMENT_LIST: parse_statement_list(n.write_offset); break;

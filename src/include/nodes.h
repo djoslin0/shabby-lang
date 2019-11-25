@@ -24,6 +24,6 @@ enum {
     #ifdef DEBUG
         NT_DEBUG_UNINDENT_NODE,
     #endif
-} typedef node_type;
+} typedef node_t;
 
 #endif
