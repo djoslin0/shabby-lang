@@ -224,6 +224,23 @@ static void gen_expression(void) {
     future_push(right_term);
 }
 
+static void gen_assignment(void) {
+    // variable identifier
+    read_token();
+    var_s* var = get_variable(token);
+    assert(var != NULL);
+
+    // push pointer
+    output(BC_PUSH, var->address);
+
+    // schedule set
+    future_push_bytecode(BC_SET);
+
+    // schedule expression
+    uint16_t expression = fget16(ast_ptr);
+    future_push(expression);
+}
+
 static void gen_declaration(void) {
     // variable type
     read_token();
@@ -288,6 +305,7 @@ void gen(FILE* src_ptr_arg, FILE* ast_ptr_arg, FILE* gen_ptr_arg) {
         switch(type) {
             case NT_STATEMENT: gen_statement(); break;
             case NT_DECLARATION: gen_declaration(); break;
+            case NT_ASSIGNMENT: gen_assignment(); break;
             case NT_EXPRESSION: gen_expression(); break;
             case NT_EXPRESSION_OP: gen_expression_op(); break;
             case NT_TERM: gen_term(); break;

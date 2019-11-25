@@ -11,6 +11,7 @@ enum {
     // Shared
     NT_STATEMENT,
     NT_DECLARATION,
+    NT_ASSIGNMENT,
     NT_EXPRESSION,
     NT_EXPRESSION_OP,
     NT_TERM,

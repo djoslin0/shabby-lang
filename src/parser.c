@@ -66,14 +66,19 @@ static future_node_s future_pop(void) {
     #define DPRINT(x, y) _dprint(x, y)
 
     static void _dprint(char* string, bool print_token) {
+        // print stack depth
         int stack_mem = 10;
         printf("%05lX  ", stack_start - (&stack_mem));
+
+        // print indent
         for (int i = 0; i < _indent; i++) { printf("    "); }
-        printf("%s", string);
+
+        // print info
         if (print_token) {
-            printf(": %s", cur_token.string);
+            printf("%s: %s\n", string, cur_token.string);
+        } else {
+            printf("%s\n", string);
         }
-        printf("\n");
     }
 #else
     #define INDENT(x)
@@ -218,7 +223,7 @@ static void parse_factor(uint16_t pointer_offset) {
     // <factor> ::= [ <unary_op> ] ( <constant> | '(' <expression> ')' | <variable> )
     // output: <type> <*constant | *expression | *variable> <*unary_op>
 
-    DPRINT("<factor>", FALSE);
+    DPRINT("factor", FALSE);
     INDENT(1);
 
     // write to parent pointer
@@ -293,7 +298,7 @@ static void parse_term(uint16_t pointer_offset) {
     // <term> ::= <factor> { ( '*' | '/' ) <factor> }
     // output: <type> <*right_factor> <*term_op> <*left_factor>
 
-    DPRINT("<term>", FALSE);
+    DPRINT("term", FALSE);
     INDENT(1);
 
     // unindent
@@ -359,7 +364,7 @@ static void parse_expression(uint16_t pointer_offset) {
     // <expression> ::= <term> { ( '+' | '-' ) <term> }
     // output: <type> <*right_term> <*expression_op> <*left_term>
 
-    DPRINT("<expression>", FALSE);
+    DPRINT("expression", FALSE);
     INDENT(1);
 
     // unindent
@@ -385,12 +390,42 @@ static void parse_expression(uint16_t pointer_offset) {
     fput16(NULL, ast_ptr); // left term
 }
 
+static void parse_assignment(uint16_t pointer_offset) {
+    // <assignment> ::= <identifier> '=' <expression>
+    // output: <type> <var_identifier> <*expression>
+
+    DPRINT("assignment", TRUE);
+    INDENT(1);
+
+    // unindent
+    #ifdef DEBUG
+    future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL);
+    #endif
+
+    // write to parent pointer
+    write_current_offset_to(pointer_offset);
+
+    // output type
+    fputc(NT_ASSIGNMENT, ast_ptr);
+
+    // output var identifier
+    assert(is_identifier(cur_token.string));
+    fputs(cur_token.string, ast_ptr); // var identifier
+    fputc(NULL, ast_ptr);
+    next_token();
+
+    // ensure we set the variable
+    assert(cur_token.string[0] == '=' && cur_token.string[1] == NULL);
+    next_token();
+
+    // schedule/allocate expression
+    future_push(NT_EXPRESSION, ftell(ast_ptr), NULL);
+    fput16(NULL, ast_ptr); // expression
+}
+
 static void parse_declaration(uint16_t pointer_offset) {
     // <declaration> ::= <var_type> <identifier> '=' <expression>
     // output: <type> <var_type_token> <var_identifier> <*expression>
-
-    DPRINT("<declaration>", FALSE);
-    INDENT(1);
 
     // unindent
     #ifdef DEBUG
@@ -409,6 +444,9 @@ static void parse_declaration(uint16_t pointer_offset) {
     fputc(NULL, ast_ptr);
     next_token();
 
+    DPRINT("declaration", TRUE);
+    INDENT(1);
+
     // output var identifier
     assert(is_identifier(cur_token.string));
     fputs(cur_token.string, ast_ptr); // var identifier
@@ -422,13 +460,14 @@ static void parse_declaration(uint16_t pointer_offset) {
     // schedule/allocate expression
     future_push(NT_EXPRESSION, ftell(ast_ptr), NULL);
     fput16(NULL, ast_ptr); // expression
+
 }
 
 static void parse_statement(uint16_t pointer_offset, uint8_t flags) {
     // <statement> ::= <declaration> ';'
     // output: <type> <*next_statement> <*declaration>
 
-    DPRINT("<statement>", FALSE);
+    DPRINT("statement", FALSE);
     INDENT(1);
 
     // write to parent pointer
@@ -451,16 +490,23 @@ static void parse_statement(uint16_t pointer_offset, uint8_t flags) {
     // expect ';' at the end
     future_push(NT_CONSUME, ';', NULL);
 
-    // schedule/allocate declaration
-    future_push(NT_DECLARATION, ftell(ast_ptr), NULL);
-    fput16(NULL, ast_ptr); // declaration
+    peek_token(cur_token.next_index);
+    if (peeked_token.string[0] == '=' && peeked_token.string[1] == NULL) {
+        // schedule/allocate assignment
+        future_push(NT_ASSIGNMENT, ftell(ast_ptr), NULL);
+        fput16(NULL, ast_ptr); // assignment
+    } else {
+        // schedule/allocate declaration
+        future_push(NT_DECLARATION, ftell(ast_ptr), NULL);
+        fput16(NULL, ast_ptr); // declaration
+    }
 }
 
 static void parse_statement_list(uint16_t pointer_offset) {
     // <statement_list> ::= <statement> [<statement> ...]
     // output:
 
-    DPRINT("<statement_list>", FALSE);
+    DPRINT("statement_list", FALSE);
     INDENT(1);
 
     // unindent
@@ -505,6 +551,7 @@ void parse(FILE* src_ptr_arg, FILE* tok_ptr_arg, FILE* out_ptr_arg) {
             case NT_STATEMENT_LIST: parse_statement_list(n.write_offset); break;
             case NT_STATEMENT: parse_statement(n.write_offset, n.flags); break;
             case NT_DECLARATION: parse_declaration(n.write_offset); break;
+            case NT_ASSIGNMENT: parse_assignment(n.write_offset); break;
             case NT_EXPRESSION: parse_expression(n.write_offset); break;
             case NT_EXPRESSION_OP: parse_expression_op(n.write_offset); break;
             case NT_TERM: parse_term(n.write_offset); break;
