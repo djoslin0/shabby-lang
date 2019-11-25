@@ -56,7 +56,8 @@ static void vm_get(void) { eval_push(eval_stack[eval_pop()]); }
 static void vm_set(void) {
     uint16_t value = eval_pop();
     uint16_t address = eval_pop();
-    eval_stack[address] = value;
+    // TODO: remove this divide by two hack. We need to move toward the stack being byte-based instead of short-based
+    eval_stack[address / 2] = value;
 }
 
 // math

@@ -30,17 +30,21 @@ static uint16_t token_count = 0; // the total number of tokens
  // scheduled future nodes //
 ////////////////////////////
 
+#define FUTURE_FLAG_STATEMENTS (1 << 0)
+
 struct {
     node_type node;
     uint16_t write_offset;
+    uint8_t flags;
 } typedef future_node;
 
 static future_node future_stack[FUTURE_STACK_SIZE] = { 0 };
 static uint16_t future_stack_count = 0;
 
-static void future_push(node_type node, uint16_t write_offset) {
+static void future_push(node_type node, uint16_t write_offset, uint8_t flags) {
     future_stack[future_stack_count].node = node;
     future_stack[future_stack_count].write_offset = write_offset;
+    future_stack[future_stack_count].flags = flags;
     future_stack_count++;
     assert(future_stack_count < FUTURE_STACK_SIZE);
 }
@@ -196,7 +200,7 @@ static void parse_factor(uint16_t pointer_offset) {
 
     // unindent
     #ifdef DEBUG
-    future_push(NT_DEBUG_UNINDENT_NODE, NULL);
+    future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL);
     #endif
 
     // output type
@@ -211,15 +215,15 @@ static void parse_factor(uint16_t pointer_offset) {
 
     if (is_numeric(value_str[0])) {
         // schedule/allocate constant
-        future_push(NT_CONSTANT, ftell(ast_ptr));
+        future_push(NT_CONSTANT, ftell(ast_ptr), NULL);
         fput16(NULL, ast_ptr);
     } else if (value_str[0] == '(' && value_str[1] == NULL) {
         // consume opening paren
         next_token();
 
         // schedule/allocate expression
-        future_push(NT_CONSUME, ')');
-        future_push(NT_EXPRESSION, ftell(ast_ptr));
+        future_push(NT_CONSUME, ')', NULL);
+        future_push(NT_EXPRESSION, ftell(ast_ptr), NULL);
         fput16(NULL, ast_ptr);
     } else {
         // unmatched
@@ -227,7 +231,7 @@ static void parse_factor(uint16_t pointer_offset) {
     }
 
     // schedule/allocate unary_op
-    future_push(NT_UNARY_OP, ftell(ast_ptr));
+    future_push(NT_UNARY_OP, ftell(ast_ptr), NULL);
     fput16(NULL, ast_ptr); // unary_op
 
 }
@@ -255,7 +259,7 @@ static void parse_term_op(uint16_t pointer_offset) {
     next_token();
 
     // schedule right factor
-    future_push(NT_FACTOR, pointer_offset - 2);
+    future_push(NT_FACTOR, pointer_offset - 2, NULL);
 }
 
 static void parse_term(uint16_t pointer_offset) {
@@ -267,7 +271,7 @@ static void parse_term(uint16_t pointer_offset) {
 
     // unindent
     #ifdef DEBUG
-    future_push(NT_DEBUG_UNINDENT_NODE, NULL);
+    future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL);
     #endif
 
     // write to parent pointer
@@ -280,16 +284,16 @@ static void parse_term(uint16_t pointer_offset) {
     fput16(NULL, ast_ptr); // right factor
 
     // schedule/allocate term op
-    future_push(NT_TERM_OP, ftell(ast_ptr));
+    future_push(NT_TERM_OP, ftell(ast_ptr), NULL);
     fput16(NULL, ast_ptr); // factor op
 
     // schedule/allocate left factor
-    future_push(NT_FACTOR, ftell(ast_ptr));
+    future_push(NT_FACTOR, ftell(ast_ptr), NULL);
     fput16(NULL, ast_ptr); // left factor
 }
 
 static void parse_consume(char c) {
-    // eats closing paren
+    // eats given character from token stream
     // output:
 
     assert(cur_token.string[0] == c);
@@ -321,7 +325,7 @@ static void parse_expression_op(uint16_t pointer_offset) {
     next_token();
 
     // schedule right term
-    future_push(NT_TERM, pointer_offset - 2);
+    future_push(NT_TERM, pointer_offset - 2, NULL);
 }
 
 static void parse_expression(uint16_t pointer_offset) {
@@ -333,7 +337,7 @@ static void parse_expression(uint16_t pointer_offset) {
 
     // unindent
     #ifdef DEBUG
-    future_push(NT_DEBUG_UNINDENT_NODE, NULL);
+    future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL);
     #endif
 
     // write to parent pointer
@@ -346,11 +350,11 @@ static void parse_expression(uint16_t pointer_offset) {
     fput16(NULL, ast_ptr); // right term
 
     // schedule/allocate expression op
-    future_push(NT_EXPRESSION_OP, ftell(ast_ptr));
+    future_push(NT_EXPRESSION_OP, ftell(ast_ptr), NULL);
     fput16(NULL, ast_ptr); // term op
 
     // schedule/allocate left term
-    future_push(NT_TERM, ftell(ast_ptr));
+    future_push(NT_TERM, ftell(ast_ptr), NULL);
     fput16(NULL, ast_ptr); // left term
 }
 
@@ -363,7 +367,7 @@ static void parse_declaration(uint16_t pointer_offset) {
 
     // unindent
     #ifdef DEBUG
-    future_push(NT_DEBUG_UNINDENT_NODE, NULL);
+    future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL);
     #endif
 
     // write to parent pointer
@@ -389,32 +393,56 @@ static void parse_declaration(uint16_t pointer_offset) {
     next_token();
 
     // schedule/allocate expression
-    future_push(NT_EXPRESSION, ftell(ast_ptr));
+    future_push(NT_EXPRESSION, ftell(ast_ptr), NULL);
     fput16(NULL, ast_ptr); // expression
 }
 
-static void parse_statement(uint16_t pointer_offset) {
+static void parse_statement(uint16_t pointer_offset, uint8_t flags) {
     // <statement> ::= <declaration> ';'
+    // output: <type> <*next_statement> <*declaration>
+
+    DPRINT("<statement>", FALSE);
+    INDENT(1);
+
+    // write to parent pointer
+    write_current_offset_to(pointer_offset);
+
+    // output type
+    fputc(NT_STATEMENT, ast_ptr);
+
+    // schedule/allocate next statement
+    if (flags & FUTURE_FLAG_STATEMENTS) {
+        future_push(NT_STATEMENT, ftell(ast_ptr), flags);
+    }
+    fput16(NULL, ast_ptr); // next statement
+
+    // unindent
+    #ifdef DEBUG
+    future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL);
+    #endif
+
+    // expect ';' at the end
+    future_push(NT_CONSUME, ';', NULL);
+
+    // schedule/allocate declaration
+    future_push(NT_DECLARATION, ftell(ast_ptr), NULL);
+    fput16(NULL, ast_ptr); // declaration
+}
+
+static void parse_statement_list(uint16_t pointer_offset) {
+    // <statement_list> ::= <statement> [<statement> ...]
     // output:
 
-    /*
-    // We don't need to display that we're parsing a statement this
-    // simply evaluates what the statement is. Keeping this code around
-    // in case it becomes important for debugging.
-    DPRINT("<statement>", FALSE);
+    DPRINT("<statement_list>", FALSE);
     INDENT(1);
 
     // unindent
     #ifdef DEBUG
-    future_push(NT_DEBUG_UNINDENT_NODE, NULL);
+    future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL);
     #endif
-    */
 
-    // expect ';' at the end
-    future_push(NT_CONSUME, ';');
-
-    // schedule declaration
-    future_push(NT_DECLARATION, pointer_offset);
+    // schedule statement
+    future_push(NT_STATEMENT, pointer_offset, FUTURE_FLAG_STATEMENTS);
 }
 
 void parse(FILE* src_ptr_arg, FILE* tok_ptr_arg, FILE* out_ptr_arg) {
@@ -441,13 +469,14 @@ void parse(FILE* src_ptr_arg, FILE* tok_ptr_arg, FILE* out_ptr_arg) {
     fput16(NULL, ast_ptr);
 
     // schedule root node
-    future_push(NT_STATEMENT, 0);
+    future_push(NT_STATEMENT_LIST, 0, NULL);
 
-    while(future_stack_count > 0) {
+    while(future_stack_count > 0 && cur_token.next_index < token_count) {
         future_node n = future_pop();
         switch(n.node) {
             case NT_CONSUME: parse_consume((char)n.write_offset); break;
-            case NT_STATEMENT: parse_statement(n.write_offset); break;
+            case NT_STATEMENT_LIST: parse_statement_list(n.write_offset); break;
+            case NT_STATEMENT: parse_statement(n.write_offset, n.flags); break;
             case NT_DECLARATION: parse_declaration(n.write_offset); break;
             case NT_EXPRESSION: parse_expression(n.write_offset); break;
             case NT_EXPRESSION_OP: parse_expression_op(n.write_offset); break;

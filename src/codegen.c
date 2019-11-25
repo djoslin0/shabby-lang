@@ -242,6 +242,13 @@ static void gen_declaration(void) {
     future_push(expression);
 }
 
+static void gen_statement(void) {
+    uint16_t next_statement = fget16(ast_ptr);
+    uint16_t child = fget16(ast_ptr);
+    future_push(next_statement);
+    future_push(child);
+}
+
 void gen(FILE* src_ptr_arg, FILE* ast_ptr_arg, FILE* gen_ptr_arg) {
     #ifdef DEBUG
         // print debug header
@@ -260,7 +267,6 @@ void gen(FILE* src_ptr_arg, FILE* ast_ptr_arg, FILE* gen_ptr_arg) {
     int bail = 0;
     while(future_stack_count > 0 && ++bail < 1000) {
         uint16_t offset = future_pop();
-
         // check for raw bytecode output
         if (offset == SCHEDULE_RAW_BYTECODE) {
             output(future_pop());
@@ -270,6 +276,7 @@ void gen(FILE* src_ptr_arg, FILE* ast_ptr_arg, FILE* gen_ptr_arg) {
         // navigate to offset and parse node
         fseek(ast_ptr, offset, 0);
         switch(fgetc(ast_ptr)) {
+            case NT_STATEMENT: gen_statement(); break;
             case NT_DECLARATION: gen_declaration(); break;
             case NT_EXPRESSION: gen_expression(); break;
             case NT_EXPRESSION_OP: gen_expression_op(); break;

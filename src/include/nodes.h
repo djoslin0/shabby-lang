@@ -6,9 +6,10 @@ enum {
     NT_NONE,
     NT_ROOT,
     NT_CONSUME,
-    NT_STATEMENT,
+    NT_STATEMENT_LIST,
 
     // Shared
+    NT_STATEMENT,
     NT_DECLARATION,
     NT_EXPRESSION,
     NT_EXPRESSION_OP,
