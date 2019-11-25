@@ -1,3 +1,2 @@
-short xxx = 1010;
-short yyy = 3030;
-xxx = 2020;
+short xxx = 1 + 2 * (3 + 4);
+short yyy = -xxx * 2;

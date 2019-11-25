@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdarg.h>
 #include <string.h>
 #include <assert.h>
 #include "symbols.h"
@@ -34,25 +35,28 @@ static uint16_t token_count = 0; // the total number of tokens
 
 struct {
     node_t node;
-    uint16_t write_offset;
+    uint16_t parent_offset;
+    uint8_t child_index;
     uint8_t flags;
 } typedef future_node_s;
 
 static future_node_s future_stack[FUTURE_STACK_SIZE] = { 0 };
 static uint16_t future_stack_count = 0;
 
-static void future_push(node_t node, uint16_t write_offset, uint8_t flags) {
+static void future_push(node_t node, uint16_t parent_offset,
+                        uint8_t child_index, uint8_t flags) {
     future_stack[future_stack_count].node = node;
-    future_stack[future_stack_count].write_offset = write_offset;
+    future_stack[future_stack_count].parent_offset = parent_offset;
+    future_stack[future_stack_count].child_index = child_index;
     future_stack[future_stack_count].flags = flags;
     future_stack_count++;
     assert(future_stack_count < FUTURE_STACK_SIZE);
 }
 
-static future_node_s future_pop(void) {
+static future_node_s* future_pop(void) {
     assert(future_stack_count > 0);
     future_stack_count--;
-    return future_stack[future_stack_count];
+    return &future_stack[future_stack_count];
 }
 
   /////////////////////////////
@@ -89,7 +93,7 @@ static future_node_s future_pop(void) {
  // utilities //
 ///////////////
 
-static void write_current_offset_to(uint8_t write_offset) {
+static void write_current_offset_to(uint16_t write_offset) {
     // write parent pointer
     uint16_t cur_offset = ftell(ast_ptr);
     fseek(ast_ptr, write_offset, 0);
@@ -141,188 +145,27 @@ static void peek_token(uint16_t index) {
     peeked_token.next_index = index + 1;
 }
 
+static uint16_t output(node_t node_type, uint16_t parent_offset, uint8_t child_index, uint8_t child_count) {
+    // output: <node_type> <value_type> <*parent> <child_count>
+    uint16_t my_offset = ftell(ast_ptr);
+    if (parent_offset == 0 && child_index == 0) {
+        write_current_offset_to(0);
+    } else {
+        write_current_offset_to(parent_offset + 5 + (uint16_t)child_index * 2);
+    }
+    fputc(node_type, ast_ptr);
+    fputc(NULL, ast_ptr);
+    fput16(parent_offset, ast_ptr);
+    fputc(child_count, ast_ptr);
+    for (int i = 0; i < child_count; i++) {
+        fput16(NULL, ast_ptr);
+    }
+    return my_offset;
+}
+
   ///////////////////////////
  // parsing functionality //
 ///////////////////////////
-
-static void parse_constant(uint16_t pointer_offset) {
-    // <constant> ::= ( '0-9'+ )
-    // output: <type> <token>
-
-    // validate constant
-    for (uint8_t i = 0; i < MAX_TOKEN_LEN; i++) {
-        if (cur_token.string[i] == NULL) { break; }
-        assert(is_numeric(cur_token.string[i]));
-    }
-
-    DPRINT("constant", TRUE);
-
-    // write to parent pointer
-    write_current_offset_to(pointer_offset);
-
-    // output type
-    fputc(NT_CONSTANT, ast_ptr);
-
-    // output token
-    fputs(cur_token.string, ast_ptr);
-    fputc(NULL, ast_ptr);
-
-    next_token();
-}
-
-static void parse_variable(uint16_t pointer_offset) {
-    // <variable> ::= ( '[a-zA-Z_][a-zA-Z0-9_]*' )
-    // output: <type> <token>
-
-    // validate identifier
-    assert(is_alpha(cur_token.string[0]) || cur_token.string[0] == '_');
-    for (uint8_t i = 0; i < MAX_TOKEN_LEN; i++) {
-        if (cur_token.string[i] == NULL) { break; }
-        assert(is_alphanumeric(cur_token.string[i]) || cur_token.string[i] == '_');
-    }
-
-    DPRINT("variable", TRUE);
-
-    // write to parent pointer
-    write_current_offset_to(pointer_offset);
-
-    // output type
-    fputc(NT_VARIABLE, ast_ptr);
-
-    // output token
-    fputs(cur_token.string, ast_ptr);
-    fputc(NULL, ast_ptr);
-
-    next_token();
-}
-
-static void parse_unary_op(uint16_t pointer_offset) {
-    // <unary_op> ::= ( '-' )
-    // output: <type> <token>
-
-    // validate unary op
-    if (!is_unary_op(cur_token.string[0])) { return; }
-    assert(cur_token.string[1] == NULL);
-
-    DPRINT("unary_op", TRUE);
-
-    // write to parent pointer
-    write_current_offset_to(pointer_offset);
-
-    // output type
-    fputc(NT_UNARY_OP, ast_ptr);
-
-    // output token
-    fputs(cur_token.string, ast_ptr);
-    fputc(NULL, ast_ptr);
-
-    next_token();
-}
-
-static void parse_factor(uint16_t pointer_offset) {
-    // <factor> ::= [ <unary_op> ] ( <constant> | '(' <expression> ')' | <variable> )
-    // output: <type> <*constant | *expression | *variable> <*unary_op>
-
-    DPRINT("factor", FALSE);
-    INDENT(1);
-
-    // write to parent pointer
-    write_current_offset_to(pointer_offset);
-
-    // unindent
-    #ifdef DEBUG
-    future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL);
-    #endif
-
-    // output type
-    fputc(NT_FACTOR, ast_ptr);
-
-    // peek ahead if current token is a unary operator
-    char* value_str = cur_token.string;
-    if (is_unary_op(cur_token.string[0])) {
-        peek_token(cur_token.next_index);
-        value_str = peeked_token.string;
-    }
-
-    if (is_numeric(value_str[0])) {
-        // schedule/allocate constant
-        future_push(NT_CONSTANT, ftell(ast_ptr), NULL);
-        fput16(NULL, ast_ptr);
-    } else if (value_str[0] == '(' && value_str[1] == NULL) {
-        // consume opening paren
-        next_token();
-
-        // schedule/allocate expression
-        future_push(NT_CONSUME, ')', NULL);
-        future_push(NT_EXPRESSION, ftell(ast_ptr), NULL);
-        fput16(NULL, ast_ptr);
-    } else {
-        // schedule/allocate variable
-        future_push(NT_VARIABLE, ftell(ast_ptr), NULL);
-        fput16(NULL, ast_ptr);
-    }
-
-    // schedule/allocate unary_op
-    future_push(NT_UNARY_OP, ftell(ast_ptr), NULL);
-    fput16(NULL, ast_ptr); // unary_op
-
-}
-
-static void parse_term_op(uint16_t pointer_offset) {
-    // <term_op> ::= ( '+' | '-' )
-    // output: <type> <token>
-
-    // validate term op
-    if (!is_term_op(cur_token.string[0])) { return; }
-    assert(cur_token.string[1] == NULL);
-
-    DPRINT("term_op", TRUE);
-
-    // write to parent pointer
-    write_current_offset_to(pointer_offset);
-
-    // output type
-    fputc(NT_TERM_OP, ast_ptr);
-
-    // output token
-    fputs(cur_token.string, ast_ptr);
-    fputc(NULL, ast_ptr);
-
-    next_token();
-
-    // schedule right factor
-    future_push(NT_FACTOR, pointer_offset - 2, NULL);
-}
-
-static void parse_term(uint16_t pointer_offset) {
-    // <term> ::= <factor> { ( '*' | '/' ) <factor> }
-    // output: <type> <*right_factor> <*term_op> <*left_factor>
-
-    DPRINT("term", FALSE);
-    INDENT(1);
-
-    // unindent
-    #ifdef DEBUG
-    future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL);
-    #endif
-
-    // write to parent pointer
-    write_current_offset_to(pointer_offset);
-
-    // output type
-    fputc(NT_TERM, ast_ptr);
-
-    // allocate right factor
-    fput16(NULL, ast_ptr); // right factor
-
-    // schedule/allocate term op
-    future_push(NT_TERM_OP, ftell(ast_ptr), NULL);
-    fput16(NULL, ast_ptr); // factor op
-
-    // schedule/allocate left factor
-    future_push(NT_FACTOR, ftell(ast_ptr), NULL);
-    fput16(NULL, ast_ptr); // left factor
-}
 
 static void parse_consume(char c) {
     // eats given character from token stream
@@ -334,9 +177,155 @@ static void parse_consume(char c) {
     next_token();
 }
 
-static void parse_expression_op(uint16_t pointer_offset) {
-    // <expression_op> ::= ( '+' | '-' )
+static void parse_constant(uint16_t parent_offset, uint8_t child_index) {
+    // <constant> ::= ( '0-9'+ )
     // output: <type> <token>
+
+    // validate constant
+    for (uint8_t i = 0; i < MAX_TOKEN_LEN; i++) {
+        if (cur_token.string[i] == NULL) { break; }
+        assert(is_numeric(cur_token.string[i]));
+    }
+
+    DPRINT("constant", TRUE);
+
+    // write base node
+    output(NT_CONSTANT, parent_offset, child_index, 0);
+
+    // output token
+    fputs(cur_token.string, ast_ptr);
+    fputc(NULL, ast_ptr);
+    next_token();
+}
+
+static void parse_variable(uint16_t parent_offset, uint8_t child_index) {
+    // <variable> ::= ( '[a-zA-Z_][a-zA-Z0-9_]*' )
+    // output: [base node] <token>
+
+    // validate identifier
+    assert(is_alpha(cur_token.string[0]) || cur_token.string[0] == '_');
+    for (uint8_t i = 0; i < MAX_TOKEN_LEN; i++) {
+        if (cur_token.string[i] == NULL) { break; }
+        assert(is_alphanumeric(cur_token.string[i]) || cur_token.string[i] == '_');
+    }
+
+    DPRINT("variable", TRUE);
+
+    // write base node
+    output(NT_VARIABLE, parent_offset, child_index, 0);
+
+    // output token
+    fputs(cur_token.string, ast_ptr);
+    fputc(NULL, ast_ptr);
+    next_token();
+}
+
+static void parse_unary_op(uint16_t parent_offset, uint8_t child_index) {
+    // <unary_op> ::= ( '-' )
+    // output: [base node] <token>
+
+    // validate unary op
+    if (!is_unary_op(cur_token.string[0])) { return; }
+    assert(cur_token.string[1] == NULL);
+
+    DPRINT("unary_op", TRUE);
+
+    // write base node
+    output(NT_UNARY_OP, parent_offset, child_index, 0);
+
+    // output token
+    fputs(cur_token.string, ast_ptr);
+    fputc(NULL, ast_ptr);
+    next_token();
+}
+
+static void parse_factor(uint16_t parent_offset, uint8_t child_index) {
+    // <factor> ::= [ <unary_op> ] ( <constant> | '(' <expression> ')' | <variable> )
+    // output: [base node] <*unary_op> <*constant | *expression | *variable>
+
+    DPRINT("factor", FALSE);
+    INDENT(1);
+
+    // unindent
+    #ifdef DEBUG
+    future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL, NULL);
+    #endif
+
+    // write base node
+    uint16_t my_offset = output(NT_FACTOR, parent_offset, child_index, 2);
+
+    // peek ahead if current token is a unary operator
+    char* value_str = cur_token.string;
+    if (is_unary_op(cur_token.string[0])) {
+        peek_token(cur_token.next_index);
+        value_str = peeked_token.string;
+    }
+
+    if (is_numeric(value_str[0])) {
+        // schedule constant
+        future_push(NT_CONSTANT, my_offset, 1, NULL);
+    } else if (value_str[0] == '(' && value_str[1] == NULL) {
+        // consume opening paren
+        next_token();
+        // schedule expression
+        future_push(NT_CONSUME, NULL, NULL, ')');
+        future_push(NT_EXPRESSION, my_offset, 1, NULL);
+    } else {
+        // schedule variable
+        future_push(NT_VARIABLE, my_offset, 1, NULL);
+    }
+
+    // schedule unary_op
+    future_push(NT_UNARY_OP, my_offset, 0, NULL);
+}
+
+static void parse_term_op(uint16_t parent_offset, uint8_t child_index) {
+    // <term_op> ::= ( '+' | '-' )
+    // output: [base node] <token>
+
+    // validate term op
+    if (!is_term_op(cur_token.string[0])) { return; }
+    assert(cur_token.string[1] == NULL);
+
+    DPRINT("term_op", TRUE);
+
+    // write base node
+    output(NT_TERM_OP, parent_offset, child_index, 0);
+
+    // output token
+    fputs(cur_token.string, ast_ptr);
+    fputc(NULL, ast_ptr);
+    next_token();
+
+    // schedule right factor
+    future_push(NT_FACTOR, parent_offset, 0, NULL);
+}
+
+static void parse_term(uint16_t parent_offset, uint8_t child_index) {
+    // <term> ::= <factor> { ( '*' | '/' ) <factor> }
+    // output: [base node] <*right_factor> <*term_op> <*left_factor>
+
+    DPRINT("term", FALSE);
+    INDENT(1);
+
+    // unindent
+    #ifdef DEBUG
+    future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL, NULL);
+    #endif
+
+    // write base node
+    uint16_t my_offset = output(NT_TERM, parent_offset, child_index, 3);
+
+    // schedule term op
+    future_push(NT_TERM_OP, my_offset, 1, NULL);
+
+    // schedule left factor
+    future_push(NT_FACTOR, my_offset, 2, NULL);
+}
+
+static void parse_expression_op(uint16_t parent_offset, uint8_t child_index) {
+    // <expression_op> ::= ( '+' | '-' )
+    // output: [base node] <token>
 
     // validate expression op
     if (!is_expression_op(cur_token.string[0])) { return; }
@@ -344,69 +333,54 @@ static void parse_expression_op(uint16_t pointer_offset) {
 
     DPRINT("expression_op", TRUE);
 
-    // write to parent pointer
-    write_current_offset_to(pointer_offset);
-
-    // output type
-    fputc(NT_EXPRESSION_OP, ast_ptr);
+    // write base node
+    output(NT_EXPRESSION_OP, parent_offset, child_index, 0);
 
     // output token
     fputs(cur_token.string, ast_ptr);
     fputc(NULL, ast_ptr);
-
     next_token();
 
     // schedule right term
-    future_push(NT_TERM, pointer_offset - 2, NULL);
+    future_push(NT_TERM, parent_offset, 0, NULL);
 }
 
-static void parse_expression(uint16_t pointer_offset) {
+static void parse_expression(uint16_t parent_offset, uint8_t child_index) {
     // <expression> ::= <term> { ( '+' | '-' ) <term> }
-    // output: <type> <*right_term> <*expression_op> <*left_term>
+    // output: [base node] <*right_term> <*expression_op> <*left_term>
 
     DPRINT("expression", FALSE);
     INDENT(1);
 
     // unindent
     #ifdef DEBUG
-    future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL);
+    future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL, NULL);
     #endif
 
-    // write to parent pointer
-    write_current_offset_to(pointer_offset);
+    // write base node
+    uint16_t my_offset = output(NT_EXPRESSION, parent_offset, child_index, 3);
 
-    // output type
-    fputc(NT_EXPRESSION, ast_ptr);
+    // schedule expression op
+    future_push(NT_EXPRESSION_OP, my_offset, 1, NULL);
 
-    // allocate right term
-    fput16(NULL, ast_ptr); // right term
-
-    // schedule/allocate expression op
-    future_push(NT_EXPRESSION_OP, ftell(ast_ptr), NULL);
-    fput16(NULL, ast_ptr); // term op
-
-    // schedule/allocate left term
-    future_push(NT_TERM, ftell(ast_ptr), NULL);
-    fput16(NULL, ast_ptr); // left term
+    // schedule left term
+    future_push(NT_TERM, my_offset, 2, NULL);
 }
 
-static void parse_assignment(uint16_t pointer_offset) {
+static void parse_assignment(uint16_t parent_offset, uint8_t child_index) {
     // <assignment> ::= <identifier> '=' <expression>
-    // output: <type> <var_identifier> <*expression>
-
-    DPRINT("assignment", TRUE);
-    INDENT(1);
+    // output: [base node] <*expression> <var_identifier>
 
     // unindent
     #ifdef DEBUG
-    future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL);
+    future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL, NULL);
     #endif
 
-    // write to parent pointer
-    write_current_offset_to(pointer_offset);
+    // write base node
+    uint16_t my_offset = output(NT_ASSIGNMENT, parent_offset, child_index, 1);
 
-    // output type
-    fputc(NT_ASSIGNMENT, ast_ptr);
+    DPRINT("assignment", TRUE);
+    INDENT(1);
 
     // output var identifier
     assert(is_identifier(cur_token.string));
@@ -418,25 +392,21 @@ static void parse_assignment(uint16_t pointer_offset) {
     assert(cur_token.string[0] == '=' && cur_token.string[1] == NULL);
     next_token();
 
-    // schedule/allocate expression
-    future_push(NT_EXPRESSION, ftell(ast_ptr), NULL);
-    fput16(NULL, ast_ptr); // expression
+    // schedule expression
+    future_push(NT_EXPRESSION, my_offset, 0, NULL);
 }
 
-static void parse_declaration(uint16_t pointer_offset) {
+static void parse_declaration(uint16_t parent_offset, uint8_t child_index) {
     // <declaration> ::= <var_type> <identifier> '=' <expression>
-    // output: <type> <var_type_token> <var_identifier> <*expression>
+    // output: [base node] <*expression> <var_type_token> <var_identifier>
 
     // unindent
     #ifdef DEBUG
-    future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL);
+    future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL, NULL);
     #endif
 
-    // write to parent pointer
-    write_current_offset_to(pointer_offset);
-
-    // output type
-    fputc(NT_DECLARATION, ast_ptr);
+    // write base node
+    uint16_t my_offset = output(NT_DECLARATION, parent_offset, child_index, 1);
 
     // output var type token
     assert(is_identifier(cur_token.string));
@@ -457,52 +427,44 @@ static void parse_declaration(uint16_t pointer_offset) {
     assert(cur_token.string[0] == '=' && cur_token.string[1] == NULL);
     next_token();
 
-    // schedule/allocate expression
-    future_push(NT_EXPRESSION, ftell(ast_ptr), NULL);
-    fput16(NULL, ast_ptr); // expression
-
+    // schedule expression
+    future_push(NT_EXPRESSION, my_offset, 0, NULL);
 }
 
-static void parse_statement(uint16_t pointer_offset, uint8_t flags) {
+static void parse_statement(uint16_t parent_offset, uint8_t child_index, uint8_t flags) {
     // <statement> ::= <declaration> ';'
-    // output: <type> <*next_statement> <*declaration>
+    // output: [base node] <*next_statement> <*assignment | *declaration>
 
     DPRINT("statement", FALSE);
     INDENT(1);
 
-    // write to parent pointer
-    write_current_offset_to(pointer_offset);
+    // write base node
+    uint16_t my_offset = output(NT_STATEMENT, parent_offset, child_index, 2);
 
-    // output type
-    fputc(NT_STATEMENT, ast_ptr);
-
-    // schedule/allocate next statement
+    // schedule next statement
     if (flags & FUTURE_FLAG_STATEMENTS) {
-        future_push(NT_STATEMENT, ftell(ast_ptr), flags);
+        future_push(NT_STATEMENT, my_offset, 0, flags);
     }
-    fput16(NULL, ast_ptr); // next statement
 
     // unindent
     #ifdef DEBUG
-    future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL);
+    future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL, NULL);
     #endif
 
     // expect ';' at the end
-    future_push(NT_CONSUME, ';', NULL);
+    future_push(NT_CONSUME, NULL, NULL, ';');
 
     peek_token(cur_token.next_index);
     if (peeked_token.string[0] == '=' && peeked_token.string[1] == NULL) {
-        // schedule/allocate assignment
-        future_push(NT_ASSIGNMENT, ftell(ast_ptr), NULL);
-        fput16(NULL, ast_ptr); // assignment
+        // schedule assignment
+        future_push(NT_ASSIGNMENT, my_offset, 1, NULL);
     } else {
-        // schedule/allocate declaration
-        future_push(NT_DECLARATION, ftell(ast_ptr), NULL);
-        fput16(NULL, ast_ptr); // declaration
+        // schedule declaration
+        future_push(NT_DECLARATION, my_offset, 1, NULL);
     }
 }
 
-static void parse_statement_list(uint16_t pointer_offset) {
+static void parse_statement_list(uint16_t parent_offset, uint8_t child_index) {
     // <statement_list> ::= <statement> [<statement> ...]
     // output:
 
@@ -511,11 +473,11 @@ static void parse_statement_list(uint16_t pointer_offset) {
 
     // unindent
     #ifdef DEBUG
-    future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL);
+    future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL, NULL);
     #endif
 
     // schedule statement
-    future_push(NT_STATEMENT, pointer_offset, FUTURE_FLAG_STATEMENTS);
+    future_push(NT_STATEMENT, parent_offset, child_index, FUTURE_FLAG_STATEMENTS);
 }
 
 void parse(FILE* src_ptr_arg, FILE* tok_ptr_arg, FILE* out_ptr_arg) {
@@ -542,24 +504,24 @@ void parse(FILE* src_ptr_arg, FILE* tok_ptr_arg, FILE* out_ptr_arg) {
     fput16(NULL, ast_ptr);
 
     // schedule root node
-    future_push(NT_STATEMENT_LIST, 0, NULL);
+    future_push(NT_STATEMENT_LIST, NULL, NULL, NULL);
 
     while(future_stack_count > 0 && cur_token.next_index < token_count) {
-        future_node_s n = future_pop();
-        switch(n.node) {
-            case NT_CONSUME: parse_consume((char)n.write_offset); break;
-            case NT_STATEMENT_LIST: parse_statement_list(n.write_offset); break;
-            case NT_STATEMENT: parse_statement(n.write_offset, n.flags); break;
-            case NT_DECLARATION: parse_declaration(n.write_offset); break;
-            case NT_ASSIGNMENT: parse_assignment(n.write_offset); break;
-            case NT_EXPRESSION: parse_expression(n.write_offset); break;
-            case NT_EXPRESSION_OP: parse_expression_op(n.write_offset); break;
-            case NT_TERM: parse_term(n.write_offset); break;
-            case NT_TERM_OP: parse_term_op(n.write_offset); break;
-            case NT_FACTOR: parse_factor(n.write_offset); break;
-            case NT_UNARY_OP: parse_unary_op(n.write_offset); break;
-            case NT_VARIABLE: parse_variable(n.write_offset); break;
-            case NT_CONSTANT: parse_constant(n.write_offset); break;
+        future_node_s* n = future_pop();
+        switch(n->node) {
+            case NT_CONSUME: parse_consume((char)n->flags); break;
+            case NT_STATEMENT_LIST: parse_statement_list(n->parent_offset, n->child_index); break;
+            case NT_STATEMENT: parse_statement(n->parent_offset, n->child_index, n->flags); break;
+            case NT_DECLARATION: parse_declaration(n->parent_offset, n->child_index); break;
+            case NT_ASSIGNMENT: parse_assignment(n->parent_offset, n->child_index); break;
+            case NT_EXPRESSION: parse_expression(n->parent_offset, n->child_index); break;
+            case NT_EXPRESSION_OP: parse_expression_op(n->parent_offset, n->child_index); break;
+            case NT_TERM: parse_term(n->parent_offset, n->child_index); break;
+            case NT_TERM_OP: parse_term_op(n->parent_offset, n->child_index); break;
+            case NT_FACTOR: parse_factor(n->parent_offset, n->child_index); break;
+            case NT_UNARY_OP: parse_unary_op(n->parent_offset, n->child_index); break;
+            case NT_VARIABLE: parse_variable(n->parent_offset, n->child_index); break;
+            case NT_CONSTANT: parse_constant(n->parent_offset, n->child_index); break;
             #ifdef DEBUG
             case NT_DEBUG_UNINDENT_NODE: INDENT(-1); break;
             #endif
@@ -577,15 +539,15 @@ int main(int argc, char *argv[]) {
 
     char src_buffer[128] = { 0 };
     sprintf(src_buffer, "../examples/%s.src", argv[1]);
-    src_ptr = fopen(src_buffer, "r");
+    src_ptr = fopen(src_buffer, "rb");
 
     char tok_buffer[128] = { 0 };
     sprintf(tok_buffer, "../bin/%s.tok", argv[1]);
-    tok_ptr = fopen(tok_buffer, "r");
+    tok_ptr = fopen(tok_buffer, "rb");
 
     char ast_buffer[128] = { 0 };
     sprintf(ast_buffer, "../bin/%s.ast", argv[1]);
-    ast_ptr = fopen(ast_buffer, "w+");
+    ast_ptr = fopen(ast_buffer, "wb+");
 
     parse(src_ptr, tok_ptr, ast_ptr);
 

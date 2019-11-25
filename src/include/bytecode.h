@@ -15,24 +15,36 @@ enum {
     BC_NOOP = 0,
 
     // stack
-    BC_PUSH,
-    BC_POP,
+    BC_PUSH8,
+    BC_POP8,
+
+    BC_PUSH16,
+    BC_POP16,
 
     // pointers
-    BC_SET,
-    BC_GET,
-    BC_IGET,
+    BC_SET8,
+    BC_GET8,
+    BC_IGET8,
+
+    BC_SET16,
+    BC_GET16,
+    BC_IGET16,
 
     // math
-    BC_NEG,
-    BC_ADD,
-    BC_SUB,
-    BC_MUL,
-    BC_DIV,
+    BC_NEG8,
+    BC_ADD8,
+    BC_SUB8,
+    BC_MUL8,
+    BC_DIV8,
+
+    BC_NEG16,
+    BC_ADD16,
+    BC_SUB16,
+    BC_MUL16,
+    BC_DIV16,
 
     // misc
     BC_EOF = EOF,
-
 } typedef bytecode_t;
 
 static bytecode_s bytecode[] = {
@@ -40,20 +52,33 @@ static bytecode_s bytecode[] = {
     [BC_NOOP] = { 0, DBG_STR("noop") },
 
     // stack
-    [BC_PUSH] = { 1, DBG_STR("push") },
-    [BC_POP] = { 0, DBG_STR("pop") },
+    [BC_PUSH8] = { 1, DBG_STR("push8") },
+    [BC_POP8] = { 0, DBG_STR("pop8") },
+
+    [BC_PUSH16] = { 1, DBG_STR("push16") },
+    [BC_POP16] = { 0, DBG_STR("pop16") },
 
     // pointers
-    [BC_SET] = { 0, DBG_STR("set") },
-    [BC_GET] = { 0, DBG_STR("get") },
-    [BC_IGET] = { 1, DBG_STR("iget") },
+    [BC_SET8] = { 0, DBG_STR("set8") },
+    [BC_GET8] = { 0, DBG_STR("get8") },
+    [BC_IGET8] = { 1, DBG_STR("iget8") },
+
+    [BC_SET16] = { 0, DBG_STR("set16") },
+    [BC_GET16] = { 0, DBG_STR("get16") },
+    [BC_IGET16] = { 1, DBG_STR("iget16") },
 
     // math
-    [BC_NEG] = { 0, DBG_STR("neg") },
-    [BC_ADD] = { 0, DBG_STR("add") },
-    [BC_SUB] = { 0, DBG_STR("sub") },
-    [BC_MUL] = { 0, DBG_STR("mul") },
-    [BC_DIV] = { 0, DBG_STR("div") },
+    [BC_NEG8] = { 0, DBG_STR("neg8") },
+    [BC_ADD8] = { 0, DBG_STR("add8") },
+    [BC_SUB8] = { 0, DBG_STR("sub8") },
+    [BC_MUL8] = { 0, DBG_STR("mul8") },
+    [BC_DIV8] = { 0, DBG_STR("div8") },
+
+    [BC_NEG16] = { 0, DBG_STR("neg16") },
+    [BC_ADD16] = { 0, DBG_STR("add16") },
+    [BC_SUB16] = { 0, DBG_STR("sub16") },
+    [BC_MUL16] = { 0, DBG_STR("mul16") },
+    [BC_DIV16] = { 0, DBG_STR("div16") },
 };
 
 #endif

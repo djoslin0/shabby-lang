@@ -17,27 +17,61 @@ static FILE *gen_ptr = NULL; // gen bytecode
  // evaluation stack //
 //////////////////////
 
-#define EVAL_STACK_SIZE 128
-static uint16_t eval_stack[EVAL_STACK_SIZE];
-static uint16_t eval_stack_count = 0;
+#define EVAL_STACK_SIZE 256
+static uint8_t eval_stack[EVAL_STACK_SIZE];
+static uint8_t eval_stack_count = 0;
 
-static void eval_push(uint16_t value) {
+// 8 bit
+static void eval_push8(uint8_t value) {
     eval_stack[eval_stack_count] = value;
     eval_stack_count++;
     assert(eval_stack_count < EVAL_STACK_SIZE);
 }
 
-static uint16_t eval_pop(void) {
+static uint8_t eval_pop8(void) {
     assert(eval_stack_count > 0);
     eval_stack_count--;
     return eval_stack[eval_stack_count];
+}
+
+static uint8_t eval_get8(uint16_t index) {
+    assert(index >= 0 && index < eval_stack_count);
+    return eval_stack[index];
+}
+
+static void eval_set8(uint16_t index, uint8_t value) {
+    assert(index >= 0 && index < eval_stack_count);
+    eval_stack[index] = value;
+}
+
+// 16 bit
+static void eval_push16(uint16_t value) {
+    *(uint16_t*)(&eval_stack[eval_stack_count]) = value;
+    eval_stack_count += 2;
+    assert(eval_stack_count < EVAL_STACK_SIZE);
+}
+
+static uint16_t eval_pop16(void) {
+    assert(eval_stack_count > 0);
+    eval_stack_count -= 2;
+    return *(uint16_t*)(&eval_stack[eval_stack_count]);
+}
+
+static uint16_t eval_get16(uint16_t index) {
+    assert(index >= 0 && index < eval_stack_count - 1);
+    return *(uint16_t*)(&eval_stack[index]);
+}
+
+static void eval_set16(uint16_t index, uint16_t value) {
+    assert(index >= 0 && index < eval_stack_count - 1);
+    *(uint16_t*)(&eval_stack[index]) = value;
 }
 
 #ifdef DEBUG
     static void output_eval_stack(void) {
         printf("\t  >>  ");
         for (int i = 0; i < eval_stack_count; i++) {
-            printf("%d ", (int16_t)eval_stack[i]);
+            printf("%d ", (int8_t)eval_stack[i]);
         }
         printf("\n");
     }
@@ -48,25 +82,33 @@ static uint16_t eval_pop(void) {
 //////////////////
 
 // stack
-static void vm_push(void) { eval_push(fget16(gen_ptr)); }
-static void vm_pop(void) { fget16(gen_ptr); }
+static void vm_push8(void) { eval_push8(fgetc(gen_ptr)); }
+static void vm_pop8(void) { eval_pop8(); }
+
+static void vm_push16(void) { eval_push16(fget16(gen_ptr)); }
+static void vm_pop16(void) { eval_pop16(); }
 
 // pointers
-static void vm_iget(void) { eval_push(eval_stack[fget16(gen_ptr)]); }
-static void vm_get(void) { eval_push(eval_stack[eval_pop()]); }
-static void vm_set(void) {
-    uint16_t value = eval_pop();
-    uint16_t address = eval_pop();
-    // TODO: remove this divide by two hack. We need to move toward the stack being byte-based instead of short-based
-    eval_stack[address / 2] = value;
-}
+static void vm_iget8(void) { eval_push8(eval_get8(fget16(gen_ptr))); }
+static void vm_get8(void) { eval_push8(eval_get8(eval_pop16())); }
+static void vm_set8(void) { eval_set8(eval_pop8(), eval_pop16()); }
+
+static void vm_iget16(void) { eval_push16(eval_get16(fget16(gen_ptr))); }
+static void vm_get16(void) { eval_push16(eval_get16(eval_pop16())); }
+static void vm_set16(void) { eval_set16(eval_pop16(), eval_pop16()); }
 
 // math
-static void vm_neg(void) { eval_push(-eval_pop()); }
-static void vm_add(void) { eval_push(eval_pop() + eval_pop()); }
-static void vm_sub(void) { eval_push(eval_pop() - eval_pop()); }
-static void vm_mul(void) { eval_push(eval_pop() * eval_pop()); }
-static void vm_div(void) { eval_push(eval_pop() / eval_pop()); }
+static void vm_neg8(void) { eval_push8(-eval_pop8()); }
+static void vm_add8(void) { eval_push8(eval_pop8() + eval_pop8()); }
+static void vm_sub8(void) { eval_push8(eval_pop8() - eval_pop8()); }
+static void vm_mul8(void) { eval_push8(eval_pop8() * eval_pop8()); }
+static void vm_div8(void) { eval_push8(eval_pop8() / eval_pop8()); }
+
+static void vm_neg16(void) { eval_push16(-eval_pop16()); }
+static void vm_add16(void) { eval_push16(eval_pop16() + eval_pop16()); }
+static void vm_sub16(void) { eval_push16(eval_pop16() - eval_pop16()); }
+static void vm_mul16(void) { eval_push16(eval_pop16() * eval_pop16()); }
+static void vm_div16(void) { eval_push16(eval_pop16() / eval_pop16()); }
 
 void vm(FILE* gen_ptr_arg) {
     gen_ptr = gen_ptr_arg;
@@ -87,20 +129,34 @@ void vm(FILE* gen_ptr_arg) {
             case BC_NOOP: break;
 
             // stack
-            case BC_PUSH: vm_push(); break;
-            case BC_POP: vm_pop(); break;
+            case BC_PUSH8: vm_push8(); break;
+            case BC_POP8: vm_pop8(); break;
+
+            case BC_PUSH16: vm_push16(); break;
+            case BC_POP16: vm_pop16(); break;
 
             // pointers
-            case BC_GET: vm_get(); break;
-            case BC_IGET: vm_iget(); break;
-            case BC_SET: vm_set(); break;
+            case BC_GET8: vm_get8(); break;
+            case BC_IGET8: vm_iget8(); break;
+            case BC_SET8: vm_set8(); break;
+
+            case BC_GET16: vm_get16(); break;
+            case BC_IGET16: vm_iget16(); break;
+            case BC_SET16: vm_set16(); break;
 
             // math
-            case BC_NEG: vm_neg(); break;
-            case BC_ADD: vm_add(); break;
-            case BC_SUB: vm_sub(); break;
-            case BC_MUL: vm_mul(); break;
-            case BC_DIV: vm_div(); break;
+            case BC_NEG8: vm_neg8(); break;
+            case BC_ADD8: vm_add8(); break;
+            case BC_SUB8: vm_sub8(); break;
+            case BC_MUL8: vm_mul8(); break;
+            case BC_DIV8: vm_div8(); break;
+
+            case BC_NEG16: vm_neg16(); break;
+            case BC_ADD16: vm_add16(); break;
+            case BC_SUB16: vm_sub16(); break;
+            case BC_MUL16: vm_mul16(); break;
+            case BC_DIV16: vm_div16(); break;
+
             case BC_EOF: return;
         }
         #ifdef DEBUG
@@ -122,7 +178,7 @@ int main(int argc, char *argv[]) {
 
     char gen_buffer[128] = { 0 };
     sprintf(gen_buffer, "../bin/%s.gen", argv[1]);
-    gen_ptr = fopen(gen_buffer, "r");
+    gen_ptr = fopen(gen_buffer, "rb");
 
     vm(gen_ptr);
 

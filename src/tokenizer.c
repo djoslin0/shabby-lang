@@ -102,7 +102,7 @@ void tokenize(FILE* ptr) {
             // print raw token offsets
             uint16_t start_index = fget16(tok_ptr);
             uint8_t length = fgetc(tok_ptr);
-            printf("%02X %02X %02X", (start_index >> 8), (start_index % 256), length);
+            printf("%02X %02X %02X", (start_index % 256), (start_index >> 8), length);
 
             // print src token string
             char buffer[length + 1];
@@ -119,11 +119,11 @@ int main(int argc, char *argv[]) {
 
     char src_buffer[128] = { 0 };
     sprintf(src_buffer, "../examples/%s.src", argv[1]);
-    src_ptr = fopen(src_buffer, "r");
+    src_ptr = fopen(src_buffer, "rb");
 
     char tok_buffer[128] = { 0 };
     sprintf(tok_buffer, "../bin/%s.tok", argv[1]);
-    tok_ptr = fopen(tok_buffer, "w+");
+    tok_ptr = fopen(tok_buffer, "wb+");
 
     tokenize(src_ptr);
 

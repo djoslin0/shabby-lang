@@ -31,6 +31,34 @@ static void read_token(void) {
     fseek(ast_ptr, last_position + strlen(token) + 1, 0);
 }
 
+  //////////////
+ // ast node //
+//////////////
+
+#define MAX_AST_CHILDREN 4
+struct {
+    node_t node_type;
+    uint8_t value_type;
+    uint16_t parent_offset;
+    uint8_t child_count;
+    uint16_t children[MAX_AST_CHILDREN];
+} typedef ast_s;
+
+static ast_s cur_node = { 0 };
+
+static void read_ast_node(uint16_t offset) {
+    fseek(ast_ptr, offset, 0);
+    cur_node.node_type = fgetc(ast_ptr);
+    cur_node.value_type = fgetc(ast_ptr);
+    cur_node.parent_offset = fget16(ast_ptr);
+    cur_node.child_count = fgetc(ast_ptr);
+    assert(cur_node.child_count < MAX_AST_CHILDREN);
+    memset(cur_node.children, NULL, MAX_AST_CHILDREN * sizeof(uint16_t));
+    for (int i = 0; i < cur_node.child_count; i++) {
+        cur_node.children[i] = fget16(ast_ptr);
+    }
+}
+
   ///////////
  // types //
 ///////////
@@ -41,7 +69,8 @@ struct {
 } typedef type_s;
 
 type_s types[] = {
-    { .size = 0, .name = "void" },
+    //{ .size = 0, .name = "void" },
+    //{ .size = 1, .name = "byte" },
     { .size = 2, .name = "short" },
 };
 
@@ -108,6 +137,14 @@ static uint16_t store_variable(type_s* type, char* name, uint8_t scope) {
 static uint16_t future_stack[FUTURE_STACK_SIZE] = { 0 };
 static uint16_t future_stack_count = 0;
 
+/*static void future_stack_print(void) {
+    printf("    ");
+    for (int i = 0; i < future_stack_count; i++) {
+        printf("%d ", future_stack[i]);
+    }
+    printf("\n");
+}*/
+
 static void future_push(uint16_t offset) {
     if (offset == NULL) { return; }
     future_stack[future_stack_count] = offset;
@@ -161,7 +198,7 @@ static void output(bytecode_t type, ...) {
 
 static void gen_constant(void) {
     read_token();
-    output(BC_PUSH, (uint16_t)atoi(token));
+    output(BC_PUSH16, (uint16_t)atoi(token));
 }
 
 static void gen_variable(void) {
@@ -170,20 +207,20 @@ static void gen_variable(void) {
     var_s* var = get_variable(token);
     assert(var != NULL);
 
-    output(BC_IGET, var->address);
+    output(BC_IGET16, var->address);
 }
 
 static void gen_unary_op(void) {
     read_token();
     switch (token[0]) {
-        case '-': output(BC_NEG); break;
+        case '-': output(BC_NEG16); break;
         default: assert(FALSE); break;
     }
 }
 
 static void gen_factor(void) {
-    uint16_t value = fget16(ast_ptr);
-    uint16_t unary_op = fget16(ast_ptr);
+    uint16_t unary_op = cur_node.children[0];
+    uint16_t value = cur_node.children[1];
     future_push(unary_op);
     future_push(value);
 }
@@ -191,16 +228,16 @@ static void gen_factor(void) {
 static void gen_term_op(void) {
     read_token();
     switch (token[0]) {
-        case '*': output(BC_MUL); break;
-        case '/': output(BC_DIV); break;
+        case '*': output(BC_MUL16); break;
+        case '/': output(BC_DIV16); break;
         default: assert(FALSE); break;
     }
 }
 
 static void gen_term(void) {
-    uint16_t right_factor = fget16(ast_ptr);
-    uint16_t term_op = fget16(ast_ptr);
-    uint16_t left_factor = fget16(ast_ptr);
+    uint16_t right_factor = cur_node.children[0];
+    uint16_t term_op = cur_node.children[1];
+    uint16_t left_factor = cur_node.children[2];
     future_push(term_op);
     future_push(left_factor);
     future_push(right_factor);
@@ -209,16 +246,16 @@ static void gen_term(void) {
 static void gen_expression_op(void) {
     read_token();
     switch (token[0]) {
-        case '+': output(BC_ADD); break;
-        case '-': output(BC_SUB); break;
+        case '+': output(BC_ADD16); break;
+        case '-': output(BC_SUB16); break;
         default: assert(FALSE); break;
     }
 }
 
 static void gen_expression(void) {
-    uint16_t right_term = fget16(ast_ptr);
-    uint16_t expression_op = fget16(ast_ptr);
-    uint16_t left_term = fget16(ast_ptr);
+    uint16_t right_term = cur_node.children[0];
+    uint16_t expression_op = cur_node.children[1];
+    uint16_t left_term = cur_node.children[2];
     future_push(expression_op);
     future_push(left_term);
     future_push(right_term);
@@ -231,13 +268,13 @@ static void gen_assignment(void) {
     assert(var != NULL);
 
     // push pointer
-    output(BC_PUSH, var->address);
+    output(BC_PUSH16, var->address);
 
     // schedule set
-    future_push_bytecode(BC_SET);
+    future_push_bytecode(BC_SET16);
 
     // schedule expression
-    uint16_t expression = fget16(ast_ptr);
+    uint16_t expression = cur_node.children[0];
     future_push(expression);
 }
 
@@ -255,24 +292,24 @@ static void gen_declaration(void) {
     uint16_t addr = store_variable(type, token, 0);
 
     // allocate space
-    output(BC_PUSH, 0);
+    output(BC_PUSH16, 0);
 
     // push pointer
-    output(BC_PUSH, addr);
+    output(BC_PUSH16, addr);
 
     // schedule set
-    future_push_bytecode(BC_SET);
+    future_push_bytecode(BC_SET16);
 
     // schedule expression
-    uint16_t expression = fget16(ast_ptr);
+    uint16_t expression = cur_node.children[0];
     future_push(expression);
 }
 
 static void gen_statement(void) {
-    uint16_t next_statement = fget16(ast_ptr);
-    uint16_t child = fget16(ast_ptr);
+    uint16_t next_statement = cur_node.children[0];
+    uint16_t this_statement = cur_node.children[1];
     future_push(next_statement);
-    future_push(child);
+    future_push(this_statement);
 }
 
 void gen(FILE* src_ptr_arg, FILE* ast_ptr_arg, FILE* gen_ptr_arg) {
@@ -300,9 +337,8 @@ void gen(FILE* src_ptr_arg, FILE* ast_ptr_arg, FILE* gen_ptr_arg) {
         }
 
         // navigate to offset and parse node
-        fseek(ast_ptr, offset, 0);
-        node_t type = fgetc(ast_ptr);
-        switch(type) {
+        read_ast_node(offset);
+        switch(cur_node.node_type) {
             case NT_STATEMENT: gen_statement(); break;
             case NT_DECLARATION: gen_declaration(); break;
             case NT_ASSIGNMENT: gen_assignment(); break;
@@ -329,15 +365,15 @@ int main(int argc, char *argv[]) {
 
     char src_buffer[128] = { 0 };
     sprintf(src_buffer, "../examples/%s.src", argv[1]);
-    src_ptr = fopen(src_buffer, "r");
+    src_ptr = fopen(src_buffer, "rb");
 
     char ast_buffer[128] = { 0 };
     sprintf(ast_buffer, "../bin/%s.ast", argv[1]);
-    ast_ptr = fopen(ast_buffer, "r");
+    ast_ptr = fopen(ast_buffer, "rb");
 
     char gen_buffer[128] = { 0 };
     sprintf(gen_buffer, "../bin/%s.gen", argv[1]);
-    gen_ptr = fopen(gen_buffer, "w+");
+    gen_ptr = fopen(gen_buffer, "wb+");
 
     gen(src_ptr, ast_ptr, gen_ptr);
 
