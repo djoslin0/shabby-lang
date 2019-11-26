@@ -23,7 +23,7 @@ if hash dot 2>/dev/null; then
   echo "#########"
   echo "# Graph #"
   echo "#########"
-  gcc graphviz.c symbols.c file.c -I include -o "../bin/graph" -Wall -Werror -Wpedantic
+  gcc graphviz.c symbols.c file.c nodes.c -I include -o "../bin/graph" -Wall -Werror -Wpedantic
   ../bin/graph $1
   dot -Tpng ../bin/$1.dot > ../bin/$1.png
 fi
@@ -32,7 +32,7 @@ echo ""
 echo "###########"
 echo "# Codegen #"
 echo "###########"
-gcc codegen.c symbols.c file.c -I include -o "../bin/codegen" -Wall -Werror -Wpedantic
+gcc codegen.c symbols.c file.c nodes.c -I include -o "../bin/codegen" -Wall -Werror -Wpedantic
 ../bin/codegen $1
 
 echo ""

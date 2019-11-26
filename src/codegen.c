@@ -18,6 +18,12 @@ static FILE *src_ptr = NULL; // source code
 static FILE *ast_ptr = NULL; // abstract syntax tree
 static FILE *gen_ptr = NULL; // output
 
+  //////////
+ // misc //
+//////////
+
+static ast_s cur_node = { 0 };
+
   /////////////////////
  // token utilities //
 /////////////////////
@@ -29,34 +35,6 @@ static void read_token(void) {
     fgets(token, MAX_TOKEN_LEN, ast_ptr);
     assert(strlen(token) < MAX_TOKEN_LEN);
     fseek(ast_ptr, last_position + strlen(token) + 1, 0);
-}
-
-  //////////////
- // ast node //
-//////////////
-
-#define MAX_AST_CHILDREN 4
-struct {
-    node_t node_type;
-    uint8_t value_type;
-    uint16_t parent_offset;
-    uint8_t child_count;
-    uint16_t children[MAX_AST_CHILDREN];
-} typedef ast_s;
-
-static ast_s cur_node = { 0 };
-
-static void read_ast_node(uint16_t offset) {
-    fseek(ast_ptr, offset, 0);
-    cur_node.node_type = fgetc(ast_ptr);
-    cur_node.value_type = fgetc(ast_ptr);
-    cur_node.parent_offset = fget16(ast_ptr);
-    cur_node.child_count = fgetc(ast_ptr);
-    assert(cur_node.child_count < MAX_AST_CHILDREN);
-    memset(cur_node.children, NULL, MAX_AST_CHILDREN * sizeof(uint16_t));
-    for (int i = 0; i < cur_node.child_count; i++) {
-        cur_node.children[i] = fget16(ast_ptr);
-    }
 }
 
   ///////////
@@ -337,7 +315,7 @@ void gen(FILE* src_ptr_arg, FILE* ast_ptr_arg, FILE* gen_ptr_arg) {
         }
 
         // navigate to offset and parse node
-        read_ast_node(offset);
+        read_ast_node(ast_ptr, offset, &cur_node);
         switch(cur_node.node_type) {
             case NT_STATEMENT: gen_statement(); break;
             case NT_DECLARATION: gen_declaration(); break;

@@ -14,6 +14,12 @@
 static FILE *ast_ptr = NULL; // ast input
 static FILE *dot_ptr = NULL; // output for graphviz
 
+  //////////
+ // misc //
+//////////
+
+static ast_s cur_node = { 0 };
+
   ////////////////////////////
  // scheduled future nodes //
 ////////////////////////////
@@ -48,34 +54,6 @@ static void read_token(void) {
 }
 
   //////////////
- // ast node //
-//////////////
-
-#define MAX_AST_CHILDREN 4
-struct {
-    node_t node_type;
-    uint8_t value_type;
-    uint16_t parent_offset;
-    uint8_t child_count;
-    uint16_t children[MAX_AST_CHILDREN];
-} typedef ast_s;
-
-static ast_s cur_node = { 0 };
-
-static void read_ast_node(uint16_t offset) {
-    fseek(ast_ptr, offset, 0);
-    cur_node.node_type = fgetc(ast_ptr);
-    cur_node.value_type = fgetc(ast_ptr);
-    cur_node.parent_offset = fget16(ast_ptr);
-    cur_node.child_count = fgetc(ast_ptr);
-    assert(cur_node.child_count < MAX_AST_CHILDREN);
-    memset(cur_node.children, NULL, MAX_AST_CHILDREN * sizeof(uint16_t));
-    for (int i = 0; i < cur_node.child_count; i++) {
-        cur_node.children[i] = fget16(ast_ptr);
-    }
-}
-
-  //////////////
  // graphing //
 //////////////
 
@@ -94,7 +72,7 @@ void graph(FILE *ast_ptr_arg, FILE *dot_ptr_arg) {
     while(future_stack_count > 0 && ++bail < 1000) {
         uint16_t offset = future_pop();
         // navigate to offset and parse node
-        read_ast_node(offset);
+        read_ast_node(ast_ptr, offset, &cur_node);
 
         node_s constants = node_constants[cur_node.node_type];
 

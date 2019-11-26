@@ -1,5 +1,6 @@
 #ifndef NODES_H
 #define NODES_H
+#include <stdio.h>
 
 enum {
     // Parser Only
@@ -58,5 +59,16 @@ static node_s node_constants[] = {
     [NT_DEBUG_UNINDENT_NODE] = { .name = "debug_unindent_node", .output_token_count = 0 },
 };
 #endif
+
+#define MAX_AST_CHILDREN 4
+struct {
+    node_t node_type;
+    uint8_t value_type;
+    uint16_t parent_offset;
+    uint8_t child_count;
+    uint16_t children[MAX_AST_CHILDREN];
+} typedef ast_s;
+
+void read_ast_node(FILE*, uint16_t, ast_s*);
 
 #endif
