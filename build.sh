@@ -17,6 +17,13 @@ echo "##########"
 gcc parser.c utils/symbols.c utils/file.c -I include -o "../bin/parser" -Wall -Werror -Wpedantic
 ../bin/parser $1
 
+echo ""
+echo "###############"
+echo "# Typechecker #"
+echo "###############"
+gcc typechecker.c utils/symbols.c utils/file.c utils/nodes.c utils/types.c utils/variables.c -I include -o "../bin/typec" -Wall -Werror -Wpedantic
+../bin/typec $1
+
 # only generates graph if graphviz is installed
 if hash dot 2>/dev/null; then
   echo ""
@@ -32,7 +39,7 @@ echo ""
 echo "###########"
 echo "# Codegen #"
 echo "###########"
-gcc codegen.c utils/symbols.c utils/file.c utils/nodes.c -I include -o "../bin/codegen" -Wall -Werror -Wpedantic
+gcc codegen.c utils/symbols.c utils/file.c utils/nodes.c utils/types.c utils/variables.c -I include -o "../bin/codegen" -Wall -Werror -Wpedantic
 ../bin/codegen $1
 
 echo ""

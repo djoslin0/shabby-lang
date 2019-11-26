@@ -5,6 +5,7 @@
 #include "symbols.h"
 #include "file.h"
 #include "nodes.h"
+#include "types.h"
 
 #ifdef DEBUG
   ///////////////////
@@ -63,7 +64,7 @@ void graph(FILE *ast_ptr_arg, FILE *dot_ptr_arg) {
 
     // write header
     fputs("digraph L {\n", dot_ptr);
-    fputs("node [shape=Mrecord]\n", dot_ptr);
+    fputs("node [shape=Mrecord,style=filled]\n", dot_ptr);
 
     // move to root node
     future_push(fget16(ast_ptr));
@@ -76,7 +77,15 @@ void graph(FILE *ast_ptr_arg, FILE *dot_ptr_arg) {
 
         node_s constants = node_constants[cur_node.node_type];
 
-        fprintf(dot_ptr, "%d [label=<%s", offset, constants.name);
+        fprintf(dot_ptr, "%d [", offset);
+
+        switch (cur_node.value_type) {
+            case TYPE_NONE: fprintf(dot_ptr, "fillcolor=\"white\","); break;
+            case TYPE_SHORT: fprintf(dot_ptr, "fillcolor=\"#EEEEFF\","); break;
+            default: printf("%d\n", cur_node.value_type); assert(FALSE);
+        }
+
+        fprintf(dot_ptr, "label=<%s", constants.name);
         if (constants.output_token_count > 0) {
             fputs("<br/><font point-size='10'>", dot_ptr);
             for (int i = 0; i < constants.output_token_count; i++) {
@@ -122,6 +131,10 @@ int main(int argc, char *argv[]) {
     printf("Created graph: ../bin/%s.png\n", argv[1]);
     fclose(dot_ptr);
     fclose(ast_ptr);
+
+    // make pedantic compilers happy
+    types[0] = types[0];
+
     return 0;
 }
 #else

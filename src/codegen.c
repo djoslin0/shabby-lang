@@ -7,6 +7,8 @@
 #include "file.h"
 #include "nodes.h"
 #include "bytecode.h"
+#include "types.h"
+#include "variables.h"
 
 #define SCHEDULE_RAW_BYTECODE ((uint16_t)-1)
 
@@ -35,77 +37,6 @@ static void read_token(void) {
     fgets(token, MAX_TOKEN_LEN, ast_ptr);
     assert(strlen(token) < MAX_TOKEN_LEN);
     fseek(ast_ptr, last_position + strlen(token) + 1, 0);
-}
-
-  ///////////
- // types //
-///////////
-
-struct {
-    uint16_t size;
-    char name[MAX_TOKEN_LEN];
-} typedef type_s;
-
-type_s types[] = {
-    //{ .size = 0, .name = "void" },
-    //{ .size = 1, .name = "byte" },
-    { .size = 2, .name = "short" },
-};
-
-static type_s* get_type(char* s) {
-    uint16_t types_count = sizeof(types) / sizeof(type_s);
-    for (int i = 0; i < types_count; i++) {
-        if (!strcmp(s, types[i].name)) { return &types[i]; }
-    }
-    return NULL;
-}
-
-  ///////////////
- // variables //
-///////////////
-
-#define MAX_VARS_IN_SCOPE 64
-struct {
-    type_s* type;
-    char name[MAX_TOKEN_LEN];
-    uint8_t scope;
-    uint8_t address;
-} typedef var_s;
-
-var_s vars[MAX_VARS_IN_SCOPE] = { 0 };
-uint16_t vars_count = 0;
-
-static var_s* get_variable(char* name) {
-    for (int i = vars_count - 1; i >= 0; i--) {
-        if (!strcmp(name, vars[i].name)) { return &vars[i]; }
-    }
-    return NULL;
-}
-
-static uint16_t store_variable(type_s* type, char* name, uint8_t scope) {
-    assert(vars_count < MAX_VARS_IN_SCOPE);
-
-    // store type
-    vars[vars_count].type = type;
-
-    // store name
-    memset(vars[vars_count].name, NULL, MAX_TOKEN_LEN);
-    strcpy(vars[vars_count].name, name);
-
-    // store scope
-    vars[vars_count].scope = scope;
-
-    // calculate and store address
-    uint16_t address = 0;
-    if (vars_count > 0) {
-        address = vars[vars_count - 1].address + vars[vars_count - 1].type->size;
-    }
-    vars[vars_count].address = address;
-
-    // increment
-    vars_count++;
-
-    return address;
 }
 
   ////////////////////////////
@@ -259,8 +190,8 @@ static void gen_assignment(void) {
 static void gen_declaration(void) {
     // variable type
     read_token();
-    type_s* type = get_type(token);
-    assert(type != NULL);
+    type_t type = get_type(token);
+    assert(type != TYPE_NONE);
 
     // variable identifier
     read_token();
@@ -362,6 +293,7 @@ int main(int argc, char *argv[]) {
     #ifdef DEBUG
     // make pedantic compilers happy
     node_constants[0] = node_constants[0];
+    types[0] = types[0];
     #endif
 
     return 0;

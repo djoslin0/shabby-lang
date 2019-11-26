@@ -1,6 +1,6 @@
 #ifndef NODES_H
 #define NODES_H
-#include <stdio.h>
+#include "constants.h"
 
 enum {
     // Parser Only
@@ -62,6 +62,7 @@ static node_s node_constants[] = {
 
 #define MAX_AST_CHILDREN 4
 struct {
+    uint16_t offset;
     node_t node_type;
     uint8_t value_type;
     uint16_t parent_offset;
