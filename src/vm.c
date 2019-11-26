@@ -4,7 +4,6 @@
 #include <assert.h>
 #include "symbols.h"
 #include "file.h"
-#include "nodes.h"
 #include "bytecode.h"
 
   ///////////////////

@@ -380,5 +380,11 @@ int main(int argc, char *argv[]) {
     fclose(src_ptr);
     fclose(ast_ptr);
     fclose(gen_ptr);
+
+    #ifdef DEBUG
+    // make pedantic compilers happy
+    node_constants[0] = node_constants[0];
+    #endif
+
     return 0;
 }

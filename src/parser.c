@@ -64,12 +64,13 @@ static future_node_s* future_pop(void) {
 /////////////////////////////
 
 #ifdef DEBUG
+    static void peek_token(uint16_t index);
     int* stack_start;
     static int _indent = 0;
     #define INDENT(x) _indent += x
     #define DPRINT(x, y) _dprint(x, y)
 
-    static void _dprint(char* string, bool print_token) {
+    static void _dprint(char* string, uint8_t tokens) {
         // print stack depth
         int stack_mem = 10;
         printf("%05lX  ", stack_start - (&stack_mem));
@@ -77,12 +78,16 @@ static future_node_s* future_pop(void) {
         // print indent
         for (int i = 0; i < _indent; i++) { printf("    "); }
 
-        // print info
-        if (print_token) {
-            printf("%s: %s\n", string, cur_token.string);
-        } else {
-            printf("%s\n", string);
+        // print header
+        printf("%s: ", string);
+
+        // print tokens
+        for (int i = 0; i < tokens; i++) {
+            peek_token(cur_token.next_index + i - 1);
+            printf("%s ", peeked_token.string);
         }
+
+        printf("\n");
     }
 #else
     #define INDENT(x)
@@ -145,9 +150,12 @@ static void peek_token(uint16_t index) {
     peeked_token.next_index = index + 1;
 }
 
-static uint16_t output(node_t node_type, uint16_t parent_offset, uint8_t child_index, uint8_t child_count) {
+static uint16_t output(node_t node_type, uint16_t parent_offset, uint8_t child_index, uint8_t child_count, uint8_t symbols) {
     // output: <node_type> <value_type> <*parent> <child_count>
     uint16_t my_offset = ftell(ast_ptr);
+
+    DPRINT(node_constants[node_type].name, symbols);
+
     if (parent_offset == 0 && child_index == 0) {
         write_current_offset_to(0);
     } else {
@@ -187,10 +195,8 @@ static void parse_constant(uint16_t parent_offset, uint8_t child_index) {
         assert(is_numeric(cur_token.string[i]));
     }
 
-    DPRINT("constant", TRUE);
-
     // write base node
-    output(NT_CONSTANT, parent_offset, child_index, 0);
+    output(NT_CONSTANT, parent_offset, child_index, 1, 1);
 
     // output token
     fputs(cur_token.string, ast_ptr);
@@ -209,10 +215,8 @@ static void parse_variable(uint16_t parent_offset, uint8_t child_index) {
         assert(is_alphanumeric(cur_token.string[i]) || cur_token.string[i] == '_');
     }
 
-    DPRINT("variable", TRUE);
-
     // write base node
-    output(NT_VARIABLE, parent_offset, child_index, 0);
+    output(NT_VARIABLE, parent_offset, child_index, 1, 1);
 
     // output token
     fputs(cur_token.string, ast_ptr);
@@ -228,10 +232,8 @@ static void parse_unary_op(uint16_t parent_offset, uint8_t child_index) {
     if (!is_unary_op(cur_token.string[0])) { return; }
     assert(cur_token.string[1] == NULL);
 
-    DPRINT("unary_op", TRUE);
-
     // write base node
-    output(NT_UNARY_OP, parent_offset, child_index, 0);
+    output(NT_UNARY_OP, parent_offset, child_index, 0, 1);
 
     // output token
     fputs(cur_token.string, ast_ptr);
@@ -243,16 +245,14 @@ static void parse_factor(uint16_t parent_offset, uint8_t child_index) {
     // <factor> ::= [ <unary_op> ] ( <constant> | '(' <expression> ')' | <variable> )
     // output: [base node] <*unary_op> <*constant | *expression | *variable>
 
-    DPRINT("factor", FALSE);
-    INDENT(1);
+    // write base node
+    uint16_t my_offset = output(NT_FACTOR, parent_offset, child_index, 2, 0);
 
-    // unindent
+    // indentation
     #ifdef DEBUG
+    INDENT(1);
     future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL, NULL);
     #endif
-
-    // write base node
-    uint16_t my_offset = output(NT_FACTOR, parent_offset, child_index, 2);
 
     // peek ahead if current token is a unary operator
     char* value_str = cur_token.string;
@@ -287,10 +287,8 @@ static void parse_term_op(uint16_t parent_offset, uint8_t child_index) {
     if (!is_term_op(cur_token.string[0])) { return; }
     assert(cur_token.string[1] == NULL);
 
-    DPRINT("term_op", TRUE);
-
     // write base node
-    output(NT_TERM_OP, parent_offset, child_index, 0);
+    output(NT_TERM_OP, parent_offset, child_index, 0, 1);
 
     // output token
     fputs(cur_token.string, ast_ptr);
@@ -305,16 +303,14 @@ static void parse_term(uint16_t parent_offset, uint8_t child_index) {
     // <term> ::= <factor> { ( '*' | '/' ) <factor> }
     // output: [base node] <*right_factor> <*term_op> <*left_factor>
 
-    DPRINT("term", FALSE);
-    INDENT(1);
+    // write base node
+    uint16_t my_offset = output(NT_TERM, parent_offset, child_index, 3, 0);
 
-    // unindent
+    // indentation
     #ifdef DEBUG
+    INDENT(1);
     future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL, NULL);
     #endif
-
-    // write base node
-    uint16_t my_offset = output(NT_TERM, parent_offset, child_index, 3);
 
     // schedule term op
     future_push(NT_TERM_OP, my_offset, 1, NULL);
@@ -331,10 +327,8 @@ static void parse_expression_op(uint16_t parent_offset, uint8_t child_index) {
     if (!is_expression_op(cur_token.string[0])) { return; }
     assert(cur_token.string[1] == NULL);
 
-    DPRINT("expression_op", TRUE);
-
     // write base node
-    output(NT_EXPRESSION_OP, parent_offset, child_index, 0);
+    output(NT_EXPRESSION_OP, parent_offset, child_index, 0, 1);
 
     // output token
     fputs(cur_token.string, ast_ptr);
@@ -349,16 +343,14 @@ static void parse_expression(uint16_t parent_offset, uint8_t child_index) {
     // <expression> ::= <term> { ( '+' | '-' ) <term> }
     // output: [base node] <*right_term> <*expression_op> <*left_term>
 
-    DPRINT("expression", FALSE);
-    INDENT(1);
+    // write base node
+    uint16_t my_offset = output(NT_EXPRESSION, parent_offset, child_index, 3, 0);
 
-    // unindent
+    // indentation
     #ifdef DEBUG
+    INDENT(1);
     future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL, NULL);
     #endif
-
-    // write base node
-    uint16_t my_offset = output(NT_EXPRESSION, parent_offset, child_index, 3);
 
     // schedule expression op
     future_push(NT_EXPRESSION_OP, my_offset, 1, NULL);
@@ -371,16 +363,14 @@ static void parse_assignment(uint16_t parent_offset, uint8_t child_index) {
     // <assignment> ::= <identifier> '=' <expression>
     // output: [base node] <*expression> <var_identifier>
 
-    // unindent
+    // write base node
+    uint16_t my_offset = output(NT_ASSIGNMENT, parent_offset, child_index, 1, 1);
+
+    // indentation
     #ifdef DEBUG
+    INDENT(1);
     future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL, NULL);
     #endif
-
-    // write base node
-    uint16_t my_offset = output(NT_ASSIGNMENT, parent_offset, child_index, 1);
-
-    DPRINT("assignment", TRUE);
-    INDENT(1);
 
     // output var identifier
     assert(is_identifier(cur_token.string));
@@ -400,22 +390,19 @@ static void parse_declaration(uint16_t parent_offset, uint8_t child_index) {
     // <declaration> ::= <var_type> <identifier> '=' <expression>
     // output: [base node] <*expression> <var_type_token> <var_identifier>
 
-    // unindent
+    // write base node
+    uint16_t my_offset = output(NT_DECLARATION, parent_offset, child_index, 1, 2);
+
+    // indentation
     #ifdef DEBUG
     future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL, NULL);
     #endif
-
-    // write base node
-    uint16_t my_offset = output(NT_DECLARATION, parent_offset, child_index, 1);
 
     // output var type token
     assert(is_identifier(cur_token.string));
     fputs(cur_token.string, ast_ptr); // var token
     fputc(NULL, ast_ptr);
     next_token();
-
-    DPRINT("declaration", TRUE);
-    INDENT(1);
 
     // output var identifier
     assert(is_identifier(cur_token.string));
@@ -435,19 +422,17 @@ static void parse_statement(uint16_t parent_offset, uint8_t child_index, uint8_t
     // <statement> ::= <declaration> ';'
     // output: [base node] <*next_statement> <*assignment | *declaration>
 
-    DPRINT("statement", FALSE);
-    INDENT(1);
-
     // write base node
-    uint16_t my_offset = output(NT_STATEMENT, parent_offset, child_index, 2);
+    uint16_t my_offset = output(NT_STATEMENT, parent_offset, child_index, 2, 0);
 
     // schedule next statement
     if (flags & FUTURE_FLAG_STATEMENTS) {
         future_push(NT_STATEMENT, my_offset, 0, flags);
     }
 
-    // unindent
+    // indentation
     #ifdef DEBUG
+    INDENT(1);
     future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL, NULL);
     #endif
 
