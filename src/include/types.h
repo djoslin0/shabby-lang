@@ -3,6 +3,7 @@
 
 enum {
     TYPE_NONE,
+    TYPE_BYTE,
     TYPE_SHORT,
 } typedef type_t;
 
@@ -12,7 +13,7 @@ struct {
 } typedef type_s;
 
 static type_s types[] = {
-    //[TYPE_BYTE] = { .size = 1, .name = "byte" },
+    [TYPE_BYTE] = { .size = 1, .name = "byte" },
     [TYPE_SHORT] = { .size = 2, .name = "short" },
     //[TYPE_INT] = { .size = 4, .name = "int" },
     //[TYPE_FLOAT] = { .size = 4, .name = "float" },

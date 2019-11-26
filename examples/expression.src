@@ -1,2 +1,2 @@
-short xxx = 1 + -2 * (3 + 4);
-short yyy = -xxx * 2;
+byte xxx = 64 + 32;
+short yyy = xxx + 32;

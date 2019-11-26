@@ -19,3 +19,50 @@ void read_ast_node(FILE* ast_ptr, uint16_t offset, ast_s* result) {
     // make pedantic compilers happy
     node_constants[0] = node_constants[0];
 }
+
+static void write_current_offset_to(FILE* ast_ptr, uint16_t write_offset) {
+    // write to pointer
+    uint16_t cur_offset = ftell(ast_ptr);
+    fseek(ast_ptr, write_offset, 0);
+    fput16(cur_offset, ast_ptr);
+    fseek(ast_ptr, cur_offset, 0);
+}
+
+uint16_t write_ast_node(FILE* ast_ptr, node_t node_type,
+                        uint16_t parent_offset, uint8_t child_index,
+                        uint8_t child_count, uint8_t symbols) {
+    // output: <node_type> <value_type> <*parent> <child_count>
+    uint16_t my_offset = ftell(ast_ptr);
+
+    if (parent_offset == 0 && child_index == 0) {
+        write_current_offset_to(ast_ptr, 0);
+    } else {
+        write_current_offset_to(ast_ptr,
+                                parent_offset + 5 + (uint16_t)child_index * 2);
+    }
+    fputc(node_type, ast_ptr);
+    fputc(NULL, ast_ptr);
+    fput16(parent_offset, ast_ptr);
+    fputc(child_count, ast_ptr);
+    for (int i = 0; i < child_count; i++) {
+        fput16(NULL, ast_ptr);
+    }
+    return my_offset;
+}
+
+void overwrite_child_pointer(FILE* ast_ptr, uint16_t parent_offset,
+                             uint8_t child_index, uint16_t child_offset) {
+    uint16_t cur_offset = ftell(ast_ptr);
+
+    // write to parent pointer
+    uint16_t offset = parent_offset + 5 + child_index * 2;
+    fseek(ast_ptr, offset, 0);
+    fput16(child_offset, ast_ptr);
+
+    // write to child pointer
+    offset = child_offset + 2;
+    fseek(ast_ptr, offset, 0);
+    fput16(parent_offset, ast_ptr);
+
+    fseek(ast_ptr, cur_offset, 0);
+}

@@ -14,7 +14,7 @@ echo ""
 echo "##########"
 echo "# Parser #"
 echo "##########"
-gcc parser.c utils/symbols.c utils/file.c -I include -o "../bin/parser" -Wall -Werror -Wpedantic
+gcc parser.c utils/symbols.c utils/file.c utils/nodes.c -I include -o "../bin/parser" -Wall -Werror -Wpedantic
 ../bin/parser $1
 
 echo ""

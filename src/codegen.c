@@ -26,6 +26,8 @@ static FILE *gen_ptr = NULL; // output
 
 static ast_s cur_node = { 0 };
 
+#define SIZE_BC(x) (x + cur_node.value_type - 1)
+
   /////////////////////
  // token utilities //
 /////////////////////
@@ -88,8 +90,13 @@ static void output(bytecode_t type, ...) {
         va_list args;
         va_start(args, type);
         for (uint8_t i = 0; i < bytecode[type].params; i++) {
-            uint16_t param = (uint16_t)va_arg(args, int);
-            fput16(param, gen_ptr);
+            int param = va_arg(args, int);
+            switch (bytecode[type].param_size) {
+                case 0: break;
+                case 1: fputc((uint8_t)param, gen_ptr); break;
+                case 2: fput16((uint16_t)param, gen_ptr); break;
+                default: assert(FALSE);
+            }
             #ifdef DEBUG
                 printf(" %d", param);
             #endif
@@ -105,9 +112,37 @@ static void output(bytecode_t type, ...) {
  // code generation //
 /////////////////////
 
+static void gen_cast(void) {
+    assert(cur_node.child_count == 1);
+
+    type_t to_type = cur_node.value_type;
+
+    read_ast_node(ast_ptr, cur_node.children[0], &cur_node);
+    type_t from_type = cur_node.value_type;
+
+    if (types[to_type].size == types[from_type].size) {
+        // no op
+        return;
+    }
+
+    // remember to extend or pop after evaluating child node
+    if (types[to_type].size > types[from_type].size) {
+        for (int i = types[from_type].size; i < types[to_type].size; i++) {
+            future_push_bytecode(BC_EXTEND);
+        }
+    } else {
+        for (int i = types[to_type].size; i < types[from_type].size; i++) {
+            future_push_bytecode(BC_POP8);
+        }
+    }
+
+    // push the child node
+    future_push(cur_node.offset);
+}
+
 static void gen_constant(void) {
     read_token();
-    output(BC_PUSH16, (uint16_t)atoi(token));
+    output(SIZE_BC(BC_PUSH8), (uint16_t)atoi(token));
 }
 
 static void gen_variable(void) {
@@ -116,13 +151,13 @@ static void gen_variable(void) {
     var_s* var = get_variable(token);
     assert(var != NULL);
 
-    output(BC_IGET16, var->address);
+    output(SIZE_BC(BC_IGET8), var->address);
 }
 
 static void gen_unary_op(void) {
     read_token();
     switch (token[0]) {
-        case '-': output(BC_NEG16); break;
+        case '-': output(SIZE_BC(BC_NEG8)); break;
         default: assert(FALSE); break;
     }
 }
@@ -137,8 +172,8 @@ static void gen_factor(void) {
 static void gen_term_op(void) {
     read_token();
     switch (token[0]) {
-        case '*': output(BC_MUL16); break;
-        case '/': output(BC_DIV16); break;
+        case '*': output(SIZE_BC(BC_MUL8)); break;
+        case '/': output(SIZE_BC(BC_DIV8)); break;
         default: assert(FALSE); break;
     }
 }
@@ -155,8 +190,8 @@ static void gen_term(void) {
 static void gen_expression_op(void) {
     read_token();
     switch (token[0]) {
-        case '+': output(BC_ADD16); break;
-        case '-': output(BC_SUB16); break;
+        case '+': output(SIZE_BC(BC_ADD8)); break;
+        case '-': output(SIZE_BC(BC_SUB8)); break;
         default: assert(FALSE); break;
     }
 }
@@ -180,7 +215,7 @@ static void gen_assignment(void) {
     output(BC_PUSH16, var->address);
 
     // schedule set
-    future_push_bytecode(BC_SET16);
+    future_push_bytecode(SIZE_BC(BC_SET8));
 
     // schedule expression
     uint16_t expression = cur_node.children[0];
@@ -201,13 +236,13 @@ static void gen_declaration(void) {
     uint16_t addr = store_variable(type, token, 0);
 
     // allocate space
-    output(BC_PUSH16, 0);
+    output(SIZE_BC(BC_PUSH8), 0);
 
     // push pointer
     output(BC_PUSH16, addr);
 
     // schedule set
-    future_push_bytecode(BC_SET16);
+    future_push_bytecode(SIZE_BC(BC_SET8));
 
     // schedule expression
     uint16_t expression = cur_node.children[0];
@@ -247,6 +282,7 @@ void gen(FILE* src_ptr_arg, FILE* ast_ptr_arg, FILE* gen_ptr_arg) {
 
         // navigate to offset and parse node
         read_ast_node(ast_ptr, offset, &cur_node);
+
         switch(cur_node.node_type) {
             case NT_STATEMENT: gen_statement(); break;
             case NT_DECLARATION: gen_declaration(); break;
@@ -259,6 +295,7 @@ void gen(FILE* src_ptr_arg, FILE* ast_ptr_arg, FILE* gen_ptr_arg) {
             case NT_UNARY_OP: gen_unary_op(); break;
             case NT_VARIABLE: gen_variable(); break;
             case NT_CONSTANT: gen_constant(); break;
+            case NT_CAST: gen_cast(); break;
             default: assert(FALSE); break;
        }
     }

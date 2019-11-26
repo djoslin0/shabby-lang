@@ -98,14 +98,6 @@ static future_node_s* future_pop(void) {
  // utilities //
 ///////////////
 
-static void write_current_offset_to(uint16_t write_offset) {
-    // write parent pointer
-    uint16_t cur_offset = ftell(ast_ptr);
-    fseek(ast_ptr, write_offset, 0);
-    fput16(cur_offset, ast_ptr);
-    fseek(ast_ptr, cur_offset, 0);
-}
-
 static void next_token() {
     // bounds checking
     if (cur_token.next_index >= token_count) {
@@ -150,25 +142,12 @@ static void peek_token(uint16_t index) {
     peeked_token.next_index = index + 1;
 }
 
-static uint16_t output(node_t node_type, uint16_t parent_offset, uint8_t child_index, uint8_t child_count, uint8_t symbols) {
-    // output: <node_type> <value_type> <*parent> <child_count>
-    uint16_t my_offset = ftell(ast_ptr);
-
+static uint16_t output(node_t node_type, uint16_t parent_offset,
+                   uint8_t child_index, uint8_t child_count,
+                   uint8_t symbols) {
     DPRINT(node_constants[node_type].name, symbols);
-
-    if (parent_offset == 0 && child_index == 0) {
-        write_current_offset_to(0);
-    } else {
-        write_current_offset_to(parent_offset + 5 + (uint16_t)child_index * 2);
-    }
-    fputc(node_type, ast_ptr);
-    fputc(NULL, ast_ptr);
-    fput16(parent_offset, ast_ptr);
-    fputc(child_count, ast_ptr);
-    for (int i = 0; i < child_count; i++) {
-        fput16(NULL, ast_ptr);
-    }
-    return my_offset;
+    return write_ast_node(ast_ptr, node_type, parent_offset,
+                          child_index, child_count, symbols);
 }
 
   ///////////////////////////
@@ -422,6 +401,8 @@ static void parse_statement(uint16_t parent_offset, uint8_t child_index, uint8_t
     // <statement> ::= <declaration> ';'
     // output: [base node] <*next_statement> <*assignment | *declaration>
 
+    if (!is_identifier(cur_token.string)) { return; }
+
     // write base node
     uint16_t my_offset = output(NT_STATEMENT, parent_offset, child_index, 2, 0);
 
@@ -491,7 +472,7 @@ void parse(FILE* src_ptr_arg, FILE* tok_ptr_arg, FILE* out_ptr_arg) {
     // schedule root node
     future_push(NT_STATEMENT_LIST, NULL, NULL, NULL);
 
-    while(future_stack_count > 0 && cur_token.next_index < token_count) {
+    while(future_stack_count > 0) {
         future_node_s* n = future_pop();
         switch(n->node) {
             case NT_CONSUME: parse_consume((char)n->flags); break;
@@ -513,6 +494,7 @@ void parse(FILE* src_ptr_arg, FILE* tok_ptr_arg, FILE* out_ptr_arg) {
             default: assert(FALSE); break;
        }
     }
+    assert(future_stack_count == 0);
 }
 
   //////////
@@ -539,5 +521,9 @@ int main(int argc, char *argv[]) {
     fclose(src_ptr);
     fclose(tok_ptr);
     fclose(ast_ptr);
+
     return 0;
+
+    // make pedantic compilers happy
+    node_constants[0] = node_constants[0];
 }

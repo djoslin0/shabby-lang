@@ -19,6 +19,7 @@ static FILE *ast_ptr = NULL; // ast input/output
 //////////
 
 static ast_s cur_node = { 0 };
+static ast_s peeked_node = { 0 };
 
   ////////////////////////////
  // scheduled future nodes //
@@ -57,41 +58,90 @@ static void read_token(void) {
  // write utilities //
 /////////////////////
 
-static void write_ast_type(type_t type) {
-    printf("%02X -> %02X\n", type, cur_node.offset + 1);
-    fseek(ast_ptr, cur_node.offset + 1, 0);
+static void write_ast_type(type_t type, uint16_t offset) {
+    fseek(ast_ptr, offset + 1, 0);
     fputc(type, ast_ptr);
 }
 
+static uint16_t insert_cast(type_t type, uint16_t parent_offset, uint8_t child_index, uint16_t child_offset) {
+    // write the new cast node
+    fseek(ast_ptr, 0, SEEK_END);
+    uint16_t cast_offset = write_ast_node(ast_ptr, NT_CAST, parent_offset,
+                                          child_index, 1, 1);
+    // insert token into ast file
+    fputs(types[type].name, ast_ptr);
+    fputc(NULL, ast_ptr);
+
+    // write cast's the value type
+    write_ast_type(type, cast_offset);
+
+    // overwrite pointers
+    overwrite_child_pointer(ast_ptr, cast_offset, 0, child_offset);
+    return cast_offset;
+}
+
 static void write_propagate(type_t type) {
-    write_ast_type(type);
-    while (cur_node.value_type == TYPE_NONE
-           && cur_node.node_type != NT_STATEMENT
-           && cur_node.node_type != NT_DECLARATION
-           && cur_node.node_type != NT_ASSIGNMENT) {
+    uint16_t last_offset = cur_node.offset;
+    write_ast_type(type, cur_node.offset);
+    while (TRUE) {
+        printf("      %s\n", node_constants[cur_node.node_type].name);
 
-        uint16_t parent_offset = cur_node.parent_offset;
-        write_ast_type(type);
+        // up-cast last node if it's parent is a larger byte size
+        if (type < cur_node.value_type) {
+            // insert cast between cur_node and last_offset
+            assert(cur_node.child_count > 0);
+            for (uint8_t i = 0; i < cur_node.child_count; i++) {
+                if (cur_node.children[i] == last_offset) {
+                    insert_cast(cur_node.value_type, cur_node.offset, i, last_offset);
+                    return;
+                }
+            }
+        }
 
+        // check for exit conditions
+        if (type == cur_node.value_type) { return; }
         switch (cur_node.node_type) {
-            case NT_EXPRESSION:
-            case NT_TERM:
-                if (cur_node.children[1] != NULL) {
-                    assert(cur_node.child_count > 1);
-                    read_ast_node(ast_ptr, cur_node.children[1], &cur_node);
-                    write_ast_type(type);
+            case NT_CAST: return;
+            case NT_STATEMENT:
+            case NT_DECLARATION:
+            case NT_ASSIGNMENT:
+                // check for a type error
+                if (type > cur_node.value_type) {
+                    printf("\nType error: \n"
+                           "'%s' provided, when '%s' was expected.\n\n",
+                           types[type].name,
+                           types[cur_node.value_type].name);
+                    assert(FALSE);
                 }
-                break;
-            case NT_FACTOR:
-                if (cur_node.children[0] != NULL) {
-                    assert(cur_node.child_count > 0);
-                    read_ast_node(ast_ptr, cur_node.children[0], &cur_node);
-                    write_ast_type(type);
-                }
+                return;
             default: break;
         }
 
-        read_ast_node(ast_ptr, parent_offset, &cur_node);
+        // write out type information
+        write_ast_type(type, cur_node.offset);
+
+
+        // check children to see if they need to be altered
+        for (uint8_t i = 0; i < cur_node.child_count; i++) {
+            if (cur_node.children[i] == NULL) { continue; }
+            read_ast_node(ast_ptr, cur_node.children[i], &peeked_node);
+            switch (peeked_node.node_type) {
+                case NT_EXPRESSION_OP:
+                case NT_TERM_OP:
+                case NT_UNARY_OP:
+                    // always set operators to the same type as their parent
+                    write_ast_type(type, peeked_node.offset);
+                    break;
+                default:
+                    // cast children who need it
+                    if (peeked_node.value_type == TYPE_NONE) { break; }
+                    if (type <= peeked_node.value_type) { break; }
+                    insert_cast(type, cur_node.offset, i, peeked_node.offset);
+            }
+        }
+
+        last_offset = cur_node.offset;
+        read_ast_node(ast_ptr, cur_node.parent_offset, &cur_node);
     }
 }
 
@@ -112,8 +162,7 @@ static void tc_constant(void) {
 
     // figure out which type to assign to the constant
     if (value >= -128 && value <= 127) {
-        // TODO: change to byte
-        write_propagate(TYPE_SHORT);
+        write_propagate(TYPE_BYTE);
     } else if (value >= -32768 && value <= 32767) {
         write_propagate(TYPE_SHORT);
     } else {
@@ -125,7 +174,7 @@ static void tc_assignment(void) {
     read_token();
     var_s* var = get_variable(token);
     assert(var->type != TYPE_NONE);
-    write_ast_type(var->type);
+    write_ast_type(var->type, cur_node.offset);
 }
 
 static void tc_declaration(void) {
@@ -136,7 +185,7 @@ static void tc_declaration(void) {
     read_token();
     store_variable(type, token, 0);
 
-    write_ast_type(type);
+    write_ast_type(type, cur_node.offset);
 }
 
 void typecheck(FILE *ast_ptr_arg) {
@@ -150,6 +199,8 @@ void typecheck(FILE *ast_ptr_arg) {
         uint16_t offset = future_pop();
         // navigate to offset and parse node
         read_ast_node(ast_ptr, offset, &cur_node);
+        printf("\n");
+        printf("%04X: %s\n", offset, node_constants[cur_node.node_type].name);
         switch (cur_node.node_type) {
             case NT_DECLARATION: tc_declaration(); break;
             case NT_ASSIGNMENT: tc_assignment(); break;

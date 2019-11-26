@@ -80,6 +80,9 @@ static void eval_set16(uint16_t index, uint16_t value) {
  // vm functions //
 //////////////////
 
+// misc
+static void vm_extend(void) { ((int8_t)eval_get8(eval_stack_count - 1)) > 0 ? eval_push8(0) : eval_push8((uint8_t)-1); }
+
 // stack
 static void vm_push8(void) { eval_push8(fgetc(gen_ptr)); }
 static void vm_pop8(void) { eval_pop8(); }
@@ -90,7 +93,7 @@ static void vm_pop16(void) { eval_pop16(); }
 // pointers
 static void vm_iget8(void) { eval_push8(eval_get8(fget16(gen_ptr))); }
 static void vm_get8(void) { eval_push8(eval_get8(eval_pop16())); }
-static void vm_set8(void) { eval_set8(eval_pop8(), eval_pop16()); }
+static void vm_set8(void) { eval_set8(eval_pop16(), eval_pop8()); }
 
 static void vm_iget16(void) { eval_push16(eval_get16(fget16(gen_ptr))); }
 static void vm_get16(void) { eval_push16(eval_get16(eval_pop16())); }
@@ -126,6 +129,7 @@ void vm(FILE* gen_ptr_arg) {
         switch (type) {
             // misc
             case BC_NOOP: break;
+            case BC_EXTEND: vm_extend(); break;
 
             // stack
             case BC_PUSH8: vm_push8(); break;

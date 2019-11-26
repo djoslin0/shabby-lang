@@ -21,6 +21,7 @@ enum {
     NT_UNARY_OP,
     NT_VARIABLE,
     NT_CONSTANT,
+    NT_CAST,
 
     // Debug
     #ifdef DEBUG
@@ -54,6 +55,7 @@ static node_s node_constants[] = {
     [NT_UNARY_OP] = { .name = "unary_op", .output_token_count = 1 },
     [NT_VARIABLE] = { .name = "variable", .output_token_count = 1 },
     [NT_CONSTANT] = { .name = "constant", .output_token_count = 1 },
+    [NT_CAST] = { .name = "cast", .output_token_count = 1 },
 
     // debug
     [NT_DEBUG_UNINDENT_NODE] = { .name = "debug_unindent_node", .output_token_count = 0 },
@@ -71,5 +73,7 @@ struct {
 } typedef ast_s;
 
 void read_ast_node(FILE*, uint16_t, ast_s*);
+uint16_t write_ast_node(FILE*, node_t, uint16_t, uint8_t, uint8_t, uint8_t);
+void overwrite_child_pointer(FILE*, uint16_t, uint8_t, uint16_t);
 
 #endif
