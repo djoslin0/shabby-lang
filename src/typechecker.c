@@ -21,6 +21,15 @@ static FILE *ast_ptr = NULL; // ast input/output
 static ast_s cur_node = { 0 };
 static ast_s peeked_node = { 0 };
 
+struct {
+    uint8_t constant_count;
+    int32_t constant_value;
+} typedef const_expr_t;
+
+#define MAX_SCRATCH 64
+static const_expr_t scratch[MAX_SCRATCH] = { 0 };
+static uint8_t on_scratch_index = 0;
+
   ////////////////////////////
  // scheduled future nodes //
 ////////////////////////////
@@ -85,16 +94,6 @@ static uint16_t insert_cast(type_t type, uint16_t parent_offset, uint8_t child_i
  // constant expression phase //
 ///////////////////////////////
 
-#define MAX_SCRATCH 64
-
-struct {
-    uint8_t constant_count;
-    int32_t constant_value;
-} typedef const_expr_t;
-
-static const_expr_t scratch[MAX_SCRATCH] = { 0 };
-static uint8_t on_scratch_index = 0;
-
 static void ce_propagate(uint32_t value) {
     while (TRUE) {
         // search for parent that is type <term> or <expression> and has a <term_op> or a <expression_op>
@@ -109,11 +108,23 @@ static void ce_propagate(uint32_t value) {
                     break;
                 case NT_CAST:
                     read_token();
+                    // cast constant expression value
                     switch (get_type(token)) {
                         case TYPE_BYTE: value = (int8_t)value; break;
                         case TYPE_SHORT: value = (int16_t)value; break;
                         default: assert(FALSE);
                     }
+                    break;
+                case NT_FACTOR:
+                    // apply unary op on constant expression value
+                    if (cur_node.children[0] == NULL) { break; }
+                    read_ast_node(ast_ptr, cur_node.children[0], &peeked_node);
+                    read_token();
+                    switch (token[0]) {
+                        case '-': value = -value; break;
+                        default: assert(FALSE);
+                    }
+                    break;
                 default: break;
             }
         }
@@ -199,29 +210,16 @@ static void ec_evaluate(void) {
     assert(bail < 1000);
 }
 
-  //////////////////
- // typechecking //
-//////////////////
+  ////////////////////////
+ // typechecking phase //
+////////////////////////
 
 static void tc_propagate(type_t type) {
     ast_s node = cur_node;
-    uint16_t last_offset = node.offset;
     write_ast_type(type, node.offset);
     uint8_t depth = 0;
     while (TRUE) {
         printf("      %s\n", node_constants[node.node_type].name);
-
-        // up-cast last node if it's parent is a larger byte size
-        if (type < node.value_type) {
-            // insert cast between node and last_offset
-            assert(node.child_count > 0);
-            for (uint8_t i = 0; i < node.child_count; i++) {
-                if (node.children[i] == last_offset) {
-                    insert_cast(node.value_type, node.offset, i, last_offset);
-                    return;
-                }
-            }
-        }
 
         // check for exit conditions
         if (type == node.value_type && depth > 0) { return; }
@@ -256,15 +254,11 @@ static void tc_propagate(type_t type) {
                     // always set operators to the same type as their parent
                     write_ast_type(type, peeked_node.offset);
                     break;
-                default:
-                    // cast children who need it
-                    if (peeked_node.value_type == TYPE_NONE) { break; }
-                    if (type <= peeked_node.value_type) { break; }
-                    insert_cast(type, node.offset, i, peeked_node.offset);
+                default: break;
             }
         }
 
-        last_offset = node.offset;
+        // iterate
         read_ast_node(ast_ptr, node.parent_offset, &node);
         depth++;
     }
@@ -288,6 +282,18 @@ static void tc_variable(void) {
 static void tc_constant(void) {
     int32_t value = 0;
     assert(fscanf(ast_ptr, "%d", &value) == 1);
+
+    // apply unary op of factor
+    read_ast_node(ast_ptr, cur_node.parent_offset, &peeked_node);
+    assert(peeked_node.node_type == NT_FACTOR);
+    if (peeked_node.children[0] != NULL) {
+        read_ast_node(ast_ptr, peeked_node.children[0], &peeked_node);
+        read_token();
+        switch (token[0]) {
+            case '-': value = -value; break;
+            default: assert(FALSE);
+        }
+    }
 
     // find the first <expression> or <term> with a type
     read_ast_node(ast_ptr, cur_node.parent_offset, &peeked_node);
@@ -346,12 +352,7 @@ static void tc_declaration(void) {
     write_ast_type(type, cur_node.offset);
 }
 
-void typecheck(FILE *ast_ptr_arg) {
-    ast_ptr = ast_ptr_arg;
-
-    // evaluate constant expressions
-    ec_evaluate();
-
+static void tc_evaluate(void) {
     // move to root node
     fseek(ast_ptr, 0, 0);
     future_push(fget16(ast_ptr));
@@ -378,6 +379,56 @@ void typecheck(FILE *ast_ptr_arg) {
         }
     }
     assert(bail < 1000);
+}
+
+  ///////////////////
+ // casting phase //
+///////////////////
+
+static void cast_evaluate(void) {
+    // move to root node
+    fseek(ast_ptr, 0, 0);
+    future_push(fget16(ast_ptr));
+
+    int bail = 0;
+    while(future_stack_count > 0 && ++bail < 1000) {
+        uint16_t offset = future_pop();
+        // navigate to offset and parse node
+        read_ast_node(ast_ptr, offset, &cur_node);
+
+        // search children
+        for (int i = 0; i < cur_node.child_count; i++) {
+            // schedule child that exists
+            if (cur_node.children[i] == NULL) { continue; }
+            future_push(cur_node.children[i]);
+
+            // figure out if we need to cast
+            if (cur_node.node_type == NT_CAST) { continue; }
+            if (cur_node.value_type == TYPE_NONE) { continue; }
+            read_ast_node(ast_ptr, cur_node.children[i], &peeked_node);
+
+            // only up-cast
+            if (peeked_node.value_type == TYPE_NONE) { continue; }
+            if (peeked_node.value_type == cur_node.value_type) { continue; }
+            assert(peeked_node.value_type < cur_node.value_type);
+            insert_cast(cur_node.value_type, cur_node.offset, i, peeked_node.offset);
+        }
+
+    }
+    assert(bail < 1000);
+}
+
+void typecheck(FILE *ast_ptr_arg) {
+    ast_ptr = ast_ptr_arg;
+
+    // evaluate constant expressions
+    ec_evaluate();
+
+    // evaluate and propagate types
+    tc_evaluate();
+
+    // insert casts where required
+    cast_evaluate();
 }
 
   //////////

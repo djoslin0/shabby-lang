@@ -1,2 +1,1 @@
-byte xxx = 3 * 1 + 2 * <byte>200;
-short yyy = xxx - 400;
+byte xxx = -128;
