@@ -83,6 +83,7 @@ static uint16_t insert_cast(type_t type, uint16_t parent_offset, uint8_t child_i
 static void write_propagate(type_t type) {
     uint16_t last_offset = cur_node.offset;
     write_ast_type(type, cur_node.offset);
+    uint8_t depth = 0;
     while (TRUE) {
         printf("      %s\n", node_constants[cur_node.node_type].name);
 
@@ -101,7 +102,7 @@ static void write_propagate(type_t type) {
         // check for exit conditions
         if (type == cur_node.value_type) { return; }
         switch (cur_node.node_type) {
-            case NT_CAST: return;
+            case NT_CAST: if (depth > 0) { return; } else { break; }
             case NT_STATEMENT:
             case NT_DECLARATION:
             case NT_ASSIGNMENT:
@@ -142,12 +143,21 @@ static void write_propagate(type_t type) {
 
         last_offset = cur_node.offset;
         read_ast_node(ast_ptr, cur_node.parent_offset, &cur_node);
+        depth++;
     }
 }
 
   //////////////////
  // typechecking //
 //////////////////
+
+static void tc_cast(void) {
+    read_token();
+    type_t type = get_type(token);
+    assert(type != TYPE_NONE);
+
+    write_propagate(type);
+}
 
 static void tc_variable(void) {
     read_token();
@@ -206,6 +216,7 @@ void typecheck(FILE *ast_ptr_arg) {
             case NT_ASSIGNMENT: tc_assignment(); break;
             case NT_VARIABLE: tc_variable(); break;
             case NT_CONSTANT: tc_constant(); break;
+            case NT_CAST: tc_cast(); break;
             default: break;
         }
         for (int i = 0; i < cur_node.child_count; i++) {

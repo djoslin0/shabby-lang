@@ -81,7 +81,7 @@ static void eval_set16(uint16_t index, uint16_t value) {
 //////////////////
 
 // misc
-static void vm_extend(void) { ((int8_t)eval_get8(eval_stack_count - 1)) > 0 ? eval_push8(0) : eval_push8((uint8_t)-1); }
+static void vm_extend(void) { ((int8_t)eval_get8(eval_stack_count - 1)) >= 0 ? eval_push8(0) : eval_push8((uint8_t)-1); }
 
 // stack
 static void vm_push8(void) { eval_push8(fgetc(gen_ptr)); }

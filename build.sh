@@ -4,6 +4,8 @@ cd src
 
 rm ../bin/*
 
+set -e
+
 echo "#############"
 echo "# Tokenizer #"
 echo "#############"
@@ -33,6 +35,10 @@ if hash dot 2>/dev/null; then
   gcc graphviz.c utils/symbols.c utils/file.c utils/nodes.c -I include -o "../bin/graph" -Wall -Werror -Wpedantic
   ../bin/graph $1
   dot -Tpng ../bin/$1.dot > ../bin/$1.png
+fi
+
+if hash display 2>/dev/null; then
+  display ../bin/$1.png &
 fi
 
 echo ""

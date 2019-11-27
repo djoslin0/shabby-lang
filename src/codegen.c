@@ -120,13 +120,10 @@ static void gen_cast(void) {
     read_ast_node(ast_ptr, cur_node.children[0], &cur_node);
     type_t from_type = cur_node.value_type;
 
+    // remember to extend or pop after evaluating child node
     if (types[to_type].size == types[from_type].size) {
         // no op
-        return;
-    }
-
-    // remember to extend or pop after evaluating child node
-    if (types[to_type].size > types[from_type].size) {
+    } else if (types[to_type].size > types[from_type].size) {
         for (int i = types[from_type].size; i < types[to_type].size; i++) {
             future_push_bytecode(BC_EXTEND);
         }
@@ -282,7 +279,7 @@ void gen(FILE* src_ptr_arg, FILE* ast_ptr_arg, FILE* gen_ptr_arg) {
 
         // navigate to offset and parse node
         read_ast_node(ast_ptr, offset, &cur_node);
-
+        printf("                %s:\n", node_constants[cur_node.node_type].name);
         switch(cur_node.node_type) {
             case NT_STATEMENT: gen_statement(); break;
             case NT_DECLARATION: gen_declaration(); break;

@@ -154,19 +154,33 @@ static uint16_t output(node_t node_type, uint16_t parent_offset,
  // parsing functionality //
 ///////////////////////////
 
-static void parse_consume(char c) {
-    // eats given character from token stream
-    // output:
+static void parse_cast(uint16_t parent_offset, uint8_t child_index) {
+    // <cast> ::= '<' <type> '>' <factor>
+    // output: [base node] <token>
 
-    assert(cur_token.string[0] == c);
-    assert(cur_token.string[1] == NULL);
+    // validate identifier
+    assert(is_alpha(cur_token.string[0]) || cur_token.string[0] == '_');
+    for (uint8_t i = 0; i < MAX_TOKEN_LEN; i++) {
+        if (cur_token.string[i] == NULL) { break; }
+        assert(is_alphanumeric(cur_token.string[i]) || cur_token.string[i] == '_');
+    }
 
+    // write base node
+    uint8_t my_offset = output(NT_CAST, parent_offset, child_index, 1, 1);
+
+    // output token
+    fputs(cur_token.string, ast_ptr);
+    fputc(NULL, ast_ptr);
     next_token();
+
+    // schedule factor
+    future_push(NT_FACTOR, my_offset, 0, NULL);
+    future_push(NT_CONSUME, NULL, NULL, '>');
 }
 
 static void parse_constant(uint16_t parent_offset, uint8_t child_index) {
     // <constant> ::= ( '0-9'+ )
-    // output: <type> <token>
+    // output: [base node] <token>
 
     // validate constant
     for (uint8_t i = 0; i < MAX_TOKEN_LEN; i++) {
@@ -221,7 +235,7 @@ static void parse_unary_op(uint16_t parent_offset, uint8_t child_index) {
 }
 
 static void parse_factor(uint16_t parent_offset, uint8_t child_index) {
-    // <factor> ::= [ <unary_op> ] ( <constant> | '(' <expression> ')' | <variable> )
+    // <factor> ::= [ <unary_op> ] ( <constant> | '(' <expression> ')' | <variable> | <cast> )
     // output: [base node] <*unary_op> <*constant | *expression | *variable>
 
     // write base node
@@ -240,6 +254,7 @@ static void parse_factor(uint16_t parent_offset, uint8_t child_index) {
         value_str = peeked_token.string;
     }
 
+    printf("'%s'\n", value_str);
     if (is_numeric(value_str[0])) {
         // schedule constant
         future_push(NT_CONSTANT, my_offset, 1, NULL);
@@ -249,6 +264,11 @@ static void parse_factor(uint16_t parent_offset, uint8_t child_index) {
         // schedule expression
         future_push(NT_CONSUME, NULL, NULL, ')');
         future_push(NT_EXPRESSION, my_offset, 1, NULL);
+    } else if (value_str[0] == '<' && value_str[1] == NULL) {
+        // consume opening '<'
+        next_token();
+        // schedule cast
+        future_push(NT_CAST, my_offset, 1, NULL);
     } else {
         // schedule variable
         future_push(NT_VARIABLE, my_offset, 1, NULL);
@@ -446,6 +466,20 @@ static void parse_statement_list(uint16_t parent_offset, uint8_t child_index) {
     future_push(NT_STATEMENT, parent_offset, child_index, FUTURE_FLAG_STATEMENTS);
 }
 
+static void parse_consume(char c) {
+    // eats given character from token stream
+    // output:
+
+    if (cur_token.string[0] != c) {
+        printf("Syntax error!\n Expected '%c' but got '%c'.\n", c, cur_token.string[0]);
+    }
+
+    assert(cur_token.string[0] == c);
+    assert(cur_token.string[1] == NULL);
+
+    next_token();
+}
+
 void parse(FILE* src_ptr_arg, FILE* tok_ptr_arg, FILE* out_ptr_arg) {
     #ifdef DEBUG
         // track stack depth in bytes
@@ -474,6 +508,7 @@ void parse(FILE* src_ptr_arg, FILE* tok_ptr_arg, FILE* out_ptr_arg) {
 
     while(future_stack_count > 0) {
         future_node_s* n = future_pop();
+        printf("%s\n", node_constants[n->node].name);
         switch(n->node) {
             case NT_CONSUME: parse_consume((char)n->flags); break;
             case NT_STATEMENT_LIST: parse_statement_list(n->parent_offset, n->child_index); break;
@@ -488,6 +523,7 @@ void parse(FILE* src_ptr_arg, FILE* tok_ptr_arg, FILE* out_ptr_arg) {
             case NT_UNARY_OP: parse_unary_op(n->parent_offset, n->child_index); break;
             case NT_VARIABLE: parse_variable(n->parent_offset, n->child_index); break;
             case NT_CONSTANT: parse_constant(n->parent_offset, n->child_index); break;
+            case NT_CAST: parse_cast(n->parent_offset, n->child_index); break;
             #ifdef DEBUG
             case NT_DEBUG_UNINDENT_NODE: INDENT(-1); break;
             #endif
