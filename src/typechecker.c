@@ -76,7 +76,7 @@ static uint16_t insert_cast(type_t type, uint16_t parent_offset, uint8_t child_i
     // write the new cast node
     fseek(ast_ptr, 0, SEEK_END);
     uint16_t cast_offset = write_ast_node(ast_ptr, NT_CAST, parent_offset,
-                                          child_index, 1, 1);
+                                          child_index);
     // insert token into ast file
     fputs(types[type].name, ast_ptr);
     fputc(NULL, ast_ptr);
@@ -196,7 +196,8 @@ static void ec_evaluate(void) {
         read_ast_node(ast_ptr, offset, &cur_node);
 
         // search children
-        for (int i = 0; i < cur_node.child_count; i++) {
+        uint8_t child_count = node_constants[cur_node.node_type].child_count;
+        for (int i = 0; i < child_count; i++) {
             future_push(cur_node.children[i]);
         }
 
@@ -246,7 +247,8 @@ static void tc_propagate(type_t type) {
         write_ast_type(type, node.offset);
 
         // check children to see if they need to be altered
-        for (uint8_t i = 0; i < node.child_count; i++) {
+        uint8_t child_count = node_constants[node.node_type].child_count;
+        for (uint8_t i = 0; i < child_count; i++) {
             if (node.children[i] == NULL) { continue; }
             read_ast_node(ast_ptr, node.children[i], &peeked_node);
             switch (peeked_node.node_type) {
@@ -376,7 +378,8 @@ static void tc_evaluate(void) {
             case NT_CAST: tc_cast(); break;
             default: break;
         }
-        for (int i = 0; i < cur_node.child_count; i++) {
+        uint8_t child_count = node_constants[cur_node.node_type].child_count;
+        for (int i = 0; i < child_count; i++) {
             future_push(cur_node.children[i]);
         }
     }
@@ -399,7 +402,8 @@ static void cast_evaluate(void) {
         read_ast_node(ast_ptr, offset, &cur_node);
 
         // search children
-        for (int i = 0; i < cur_node.child_count; i++) {
+        uint8_t child_count = node_constants[cur_node.node_type].child_count;
+        for (int i = 0; i < child_count; i++) {
             // schedule child that exists
             if (cur_node.children[i] == NULL) { continue; }
             future_push(cur_node.children[i]);

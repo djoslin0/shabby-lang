@@ -95,7 +95,7 @@ void graph(FILE *ast_ptr_arg, FILE *dot_ptr_arg) {
         }
         fprintf(dot_ptr, ">]\n");
 
-        for (int i = node.child_count - 1; i >= 0; i--) {
+        for (int i = node_constants[node.node_type].child_count - 1; i >= 0; i--) {
             if (node.children[i] == NULL) { continue; }
             fprintf(dot_ptr, "  %d -> %d\n", offset, node.children[i]);
             future_push(node.children[i]);

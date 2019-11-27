@@ -1,1 +1,2 @@
-short xxx = 1 + 2 + 30;
+short xxx = 1 + 2 + 300 * 1 * <byte>2 * 3;
+xxx = 0;

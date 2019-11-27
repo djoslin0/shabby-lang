@@ -33,32 +33,33 @@ enum {
 #ifdef DEBUG
 struct {
     char name[MAX_TOKEN_LEN];
+    uint8_t child_count;
     uint8_t output_token_count;
 } typedef node_s;
 
 static node_s node_constants[] = {
     // Parser Only
-    [NT_NONE] = { .name = "none", .output_token_count = 0 },
-    [NT_ROOT] = { .name = "root", .output_token_count = 0 },
-    [NT_CONSUME] = { .name = "consume", .output_token_count = 0 },
-    [NT_STATEMENT_LIST] = { .name = "statement_list", .output_token_count = 0 },
+    [NT_NONE] = { "none", 0, 0 },
+    [NT_ROOT] = { "root", 0, 0 },
+    [NT_CONSUME] = { "consume", 0, 0 },
+    [NT_STATEMENT_LIST] = { "statement_list", 0, 0 },
 
     // Shared
-    [NT_STATEMENT] = { .name = "statement", .output_token_count = 0 },
-    [NT_DECLARATION] = { .name = "declaration", .output_token_count = 2 },
-    [NT_ASSIGNMENT] = { .name = "assignment", .output_token_count = 1 },
-    [NT_EXPRESSION] = { .name = "expression", .output_token_count = 0 },
-    [NT_EXPRESSION_OP] = { .name = "expression_op", .output_token_count = 1 },
-    [NT_TERM] = { .name = "term", .output_token_count = 0 },
-    [NT_TERM_OP] = { .name = "term_op", .output_token_count = 1 },
-    [NT_FACTOR] = { .name = "factor", .output_token_count = 0 },
-    [NT_UNARY_OP] = { .name = "unary_op", .output_token_count = 1 },
-    [NT_VARIABLE] = { .name = "variable", .output_token_count = 1 },
-    [NT_CONSTANT] = { .name = "constant", .output_token_count = 1 },
-    [NT_CAST] = { .name = "cast", .output_token_count = 1 },
+    [NT_STATEMENT] = { "statement", 2, 0 },
+    [NT_DECLARATION] = { "declaration", 1, 2 },
+    [NT_ASSIGNMENT] = { "assignment", 1, 1 },
+    [NT_EXPRESSION] = { "expression", 3, 0 },
+    [NT_EXPRESSION_OP] = { "expression_op", 0, 1 },
+    [NT_TERM] = { "term", 3, 0 },
+    [NT_TERM_OP] = { "term_op", 0, 1 },
+    [NT_FACTOR] = { "factor", 2, 0 },
+    [NT_UNARY_OP] = { "unary_op", 0, 1 },
+    [NT_VARIABLE] = { "variable", 0, 1 },
+    [NT_CONSTANT] = { "constant", 0, 1 },
+    [NT_CAST] = { "cast", 1, 1 },
 
     // debug
-    [NT_DEBUG_UNINDENT_NODE] = { .name = "debug_unindent_node", .output_token_count = 0 },
+    [NT_DEBUG_UNINDENT_NODE] = { "debug_unindent_node", 0, 0 },
 };
 #endif
 
@@ -68,13 +69,12 @@ struct {
     node_t node_type;
     uint8_t value_type;
     uint16_t parent_offset;
-    uint8_t child_count;
     uint16_t children[MAX_AST_CHILDREN];
     uint16_t scratch;
 } typedef ast_s;
 
 void read_ast_node(FILE*, uint16_t, ast_s*);
-uint16_t write_ast_node(FILE*, node_t, uint16_t, uint8_t, uint8_t, uint8_t);
+uint16_t write_ast_node(FILE*, node_t, uint16_t, uint8_t);
 void overwrite_child_pointer(FILE*, uint16_t, uint8_t, uint16_t);
 void overwrite_scratch(FILE*, uint16_t, uint16_t);
 

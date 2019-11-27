@@ -144,11 +144,10 @@ static void peek_token(uint16_t index) {
 }
 
 static uint16_t output(node_t node_type, uint16_t parent_offset,
-                   uint8_t child_index, uint8_t child_count,
-                   uint8_t symbols) {
-    DPRINT(node_constants[node_type].name, symbols);
+                   uint8_t child_index) {
+    DPRINT(node_constants[node_type].name, node_constants[node_type].output_token_count);
     return write_ast_node(ast_ptr, node_type, parent_offset,
-                          child_index, child_count, symbols);
+                          child_index);
 }
 
   ///////////////////////////
@@ -157,7 +156,7 @@ static uint16_t output(node_t node_type, uint16_t parent_offset,
 
 static void parse_cast(uint16_t parent_offset, uint8_t child_index) {
     // <cast> ::= '<' <type> '>' <factor>
-    // output: [base node] <token>
+    // output: [base node] <factor*> <token>
 
     // validate identifier
     assert(is_alpha(cur_token.string[0]) || cur_token.string[0] == '_');
@@ -167,7 +166,7 @@ static void parse_cast(uint16_t parent_offset, uint8_t child_index) {
     }
 
     // write base node
-    uint8_t my_offset = output(NT_CAST, parent_offset, child_index, 1, 1);
+    uint8_t my_offset = output(NT_CAST, parent_offset, child_index);
 
     // output token
     fputs(cur_token.string, ast_ptr);
@@ -190,7 +189,7 @@ static void parse_constant(uint16_t parent_offset, uint8_t child_index) {
     }
 
     // write base node
-    output(NT_CONSTANT, parent_offset, child_index, 1, 1);
+    output(NT_CONSTANT, parent_offset, child_index);
 
     // output token
     fputs(cur_token.string, ast_ptr);
@@ -210,7 +209,7 @@ static void parse_variable(uint16_t parent_offset, uint8_t child_index) {
     }
 
     // write base node
-    output(NT_VARIABLE, parent_offset, child_index, 1, 1);
+    output(NT_VARIABLE, parent_offset, child_index);
 
     // output token
     fputs(cur_token.string, ast_ptr);
@@ -227,7 +226,7 @@ static void parse_unary_op(uint16_t parent_offset, uint8_t child_index) {
     assert(cur_token.string[1] == NULL);
 
     // write base node
-    output(NT_UNARY_OP, parent_offset, child_index, 0, 1);
+    output(NT_UNARY_OP, parent_offset, child_index);
 
     // output token
     fputs(cur_token.string, ast_ptr);
@@ -240,7 +239,7 @@ static void parse_factor(uint16_t parent_offset, uint8_t child_index) {
     // output: [base node] <*unary_op> <*constant | *expression | *variable>
 
     // write base node
-    uint16_t my_offset = output(NT_FACTOR, parent_offset, child_index, 2, 0);
+    uint16_t my_offset = output(NT_FACTOR, parent_offset, child_index);
 
     // indentation
     #ifdef DEBUG
@@ -297,10 +296,11 @@ static void parse_term_op(uint16_t parent_offset, uint8_t child_index, uint8_t f
         fseek(ast_ptr, 0, SEEK_END);
 
         // overwrite old term's parent to point to new term
-        for (uint8_t i = 0; i < node.child_count; i++) {
+        uint8_t child_count = node_constants[node.node_type].child_count;
+        for (uint8_t i = 0; i < child_count; i++) {
             if (node.children[i] == child_term) {
                 // add any new nodes to this new term instead of the previous one
-                parent_offset = output(NT_TERM, node.offset, i, 3, NULL);
+                parent_offset = output(NT_TERM, node.offset, i);
                 child_index = 1;
                 break;
             }
@@ -312,7 +312,7 @@ static void parse_term_op(uint16_t parent_offset, uint8_t child_index, uint8_t f
     }
 
     // write base node
-    output(NT_TERM_OP, parent_offset, child_index, 0, 1);
+    output(NT_TERM_OP, parent_offset, child_index);
 
     // output token
     fputs(cur_token.string, ast_ptr);
@@ -331,7 +331,7 @@ static void parse_term(uint16_t parent_offset, uint8_t child_index) {
     // output: [base node] <*right_factor> <*term_op> <*left_factor>
 
     // write base node
-    uint16_t my_offset = output(NT_TERM, parent_offset, child_index, 3, NULL);
+    uint16_t my_offset = output(NT_TERM, parent_offset, child_index);
 
     // indentation
     #ifdef DEBUG
@@ -365,10 +365,11 @@ static void parse_expression_op(uint16_t parent_offset, uint8_t child_index, uin
         fseek(ast_ptr, 0, SEEK_END);
 
         // overwrite old term's parent to point to new expression
-        for (uint8_t i = 0; i < node.child_count; i++) {
+        uint8_t child_count = node_constants[node.node_type].child_count;
+        for (uint8_t i = 0; i < child_count; i++) {
             if (node.children[i] == child_expression) {
                 // add any new nodes to this new expression instead of the previous one
-                parent_offset = output(NT_EXPRESSION, node.offset, i, 3, NULL);
+                parent_offset = output(NT_EXPRESSION, node.offset, i);
                 child_index = 1;
                 break;
             }
@@ -380,7 +381,7 @@ static void parse_expression_op(uint16_t parent_offset, uint8_t child_index, uin
     }
 
     // write base node
-    output(NT_EXPRESSION_OP, parent_offset, child_index, 0, 1);
+    output(NT_EXPRESSION_OP, parent_offset, child_index);
 
     // output token
     fputs(cur_token.string, ast_ptr);
@@ -399,7 +400,7 @@ static void parse_expression(uint16_t parent_offset, uint8_t child_index) {
     // output: [base node] <*right_term> <*expression_op> <*left_term>
 
     // write base node
-    uint16_t my_offset = output(NT_EXPRESSION, parent_offset, child_index, 3, 0);
+    uint16_t my_offset = output(NT_EXPRESSION, parent_offset, child_index);
 
     // indentation
     #ifdef DEBUG
@@ -419,7 +420,7 @@ static void parse_assignment(uint16_t parent_offset, uint8_t child_index) {
     // output: [base node] <*expression> <var_identifier>
 
     // write base node
-    uint16_t my_offset = output(NT_ASSIGNMENT, parent_offset, child_index, 1, 1);
+    uint16_t my_offset = output(NT_ASSIGNMENT, parent_offset, child_index);
 
     // indentation
     #ifdef DEBUG
@@ -446,7 +447,7 @@ static void parse_declaration(uint16_t parent_offset, uint8_t child_index) {
     // output: [base node] <*expression> <var_type_token> <var_identifier>
 
     // write base node
-    uint16_t my_offset = output(NT_DECLARATION, parent_offset, child_index, 1, 2);
+    uint16_t my_offset = output(NT_DECLARATION, parent_offset, child_index);
 
     // indentation
     #ifdef DEBUG
@@ -480,7 +481,7 @@ static void parse_statement(uint16_t parent_offset, uint8_t child_index, uint8_t
     if (!is_identifier(cur_token.string)) { return; }
 
     // write base node
-    uint16_t my_offset = output(NT_STATEMENT, parent_offset, child_index, 2, 0);
+    uint16_t my_offset = output(NT_STATEMENT, parent_offset, child_index);
 
     // schedule next statement
     if (flags & FUTURE_FLAG_STATEMENTS) {

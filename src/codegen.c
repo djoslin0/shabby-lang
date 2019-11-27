@@ -114,8 +114,6 @@ static void output(bytecode_t type, ...) {
 /////////////////////
 
 static void gen_cast(void) {
-    assert(cur_node.child_count == 1);
-
     type_t to_type = cur_node.value_type;
 
     read_ast_node(ast_ptr, cur_node.children[0], &peeked_node);
