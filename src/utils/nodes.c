@@ -35,10 +35,13 @@ uint16_t write_ast_node(FILE* ast_ptr, node_t node_type,
     // output: <node_type> <value_type> <scratch> <*parent> <child_count> <children*...>
     uint16_t my_offset = ftell(ast_ptr);
 
+    assert(child_count < MAX_AST_CHILDREN);
+
     // write to parent
     if (parent_offset == 0 && child_index == 0) {
         write_current_offset_to(ast_ptr, 0);
     } else {
+        fseek(ast_ptr, my_offset, 0);
         write_current_offset_to(ast_ptr,
                                 parent_offset + 7 + (uint16_t)child_index * 2);
     }

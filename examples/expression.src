@@ -1,1 +1,1 @@
-byte xxx = -128;
+short xxx = 1 + 2 + 30;

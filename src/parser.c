@@ -32,6 +32,7 @@ static uint16_t token_count = 0; // the total number of tokens
 ////////////////////////////
 
 #define FUTURE_FLAG_STATEMENTS (1 << 0)
+#define FUTURE_FLAG_INSERT (1 << 1)
 
 struct {
     node_t node;
@@ -254,7 +255,6 @@ static void parse_factor(uint16_t parent_offset, uint8_t child_index) {
         value_str = peeked_token.string;
     }
 
-    printf("'%s'\n", value_str);
     if (is_numeric(value_str[0])) {
         // schedule constant
         future_push(NT_CONSTANT, my_offset, 1, NULL);
@@ -278,13 +278,38 @@ static void parse_factor(uint16_t parent_offset, uint8_t child_index) {
     future_push(NT_UNARY_OP, my_offset, 0, NULL);
 }
 
-static void parse_term_op(uint16_t parent_offset, uint8_t child_index) {
-    // <term_op> ::= ( '+' | '-' )
+static void parse_term_op(uint16_t parent_offset, uint8_t child_index, uint8_t flags) {
+    // <term_op> ::= ( '*' | '/' )
     // output: [base node] <token>
 
     // validate term op
     if (!is_term_op(cur_token.string[0])) { return; }
     assert(cur_token.string[1] == NULL);
+
+    // check to see if this is a nested term
+    if (flags & FUTURE_FLAG_INSERT) {
+        uint16_t child_term = parent_offset;
+
+        // read grand parent
+        ast_s node = { 0 };
+        read_ast_node(ast_ptr, parent_offset, &node);
+        read_ast_node(ast_ptr, node.parent_offset, &node);
+        fseek(ast_ptr, 0, SEEK_END);
+
+        // overwrite old term's parent to point to new term
+        for (uint8_t i = 0; i < node.child_count; i++) {
+            if (node.children[i] == child_term) {
+                // add any new nodes to this new term instead of the previous one
+                parent_offset = output(NT_TERM, node.offset, i, 3, NULL);
+                child_index = 1;
+                break;
+            }
+        }
+        assert(parent_offset != child_term);
+
+        // place old term as child of new term
+        overwrite_child_pointer(ast_ptr, parent_offset, 2, child_term);
+    }
 
     // write base node
     output(NT_TERM_OP, parent_offset, child_index, 0, 1);
@@ -294,16 +319,19 @@ static void parse_term_op(uint16_t parent_offset, uint8_t child_index) {
     fputc(NULL, ast_ptr);
     next_token();
 
+    // schedule nested term
+    future_push(NT_TERM_OP, parent_offset, 0, FUTURE_FLAG_INSERT);
+
     // schedule right factor
     future_push(NT_FACTOR, parent_offset, 0, NULL);
 }
 
 static void parse_term(uint16_t parent_offset, uint8_t child_index) {
-    // <term> ::= <factor> { ( '*' | '/' ) <factor> }
+    // <term> ::= <factor> [ <term_op> <factor> ... ]
     // output: [base node] <*right_factor> <*term_op> <*left_factor>
 
     // write base node
-    uint16_t my_offset = output(NT_TERM, parent_offset, child_index, 3, 0);
+    uint16_t my_offset = output(NT_TERM, parent_offset, child_index, 3, NULL);
 
     // indentation
     #ifdef DEBUG
@@ -318,13 +346,38 @@ static void parse_term(uint16_t parent_offset, uint8_t child_index) {
     future_push(NT_FACTOR, my_offset, 2, NULL);
 }
 
-static void parse_expression_op(uint16_t parent_offset, uint8_t child_index) {
+static void parse_expression_op(uint16_t parent_offset, uint8_t child_index, uint8_t flags) {
     // <expression_op> ::= ( '+' | '-' )
     // output: [base node] <token>
 
     // validate expression op
     if (!is_expression_op(cur_token.string[0])) { return; }
     assert(cur_token.string[1] == NULL);
+
+    // check to see if this is a nested expression
+    if (flags & FUTURE_FLAG_INSERT) {
+        uint16_t child_expression = parent_offset;
+
+        // read grand parent
+        ast_s node = { 0 };
+        read_ast_node(ast_ptr, parent_offset, &node);
+        read_ast_node(ast_ptr, node.parent_offset, &node);
+        fseek(ast_ptr, 0, SEEK_END);
+
+        // overwrite old term's parent to point to new expression
+        for (uint8_t i = 0; i < node.child_count; i++) {
+            if (node.children[i] == child_expression) {
+                // add any new nodes to this new expression instead of the previous one
+                parent_offset = output(NT_EXPRESSION, node.offset, i, 3, NULL);
+                child_index = 1;
+                break;
+            }
+        }
+        assert(parent_offset != child_expression);
+
+        // place old expression as child of new expression
+        overwrite_child_pointer(ast_ptr, parent_offset, 2, child_expression);
+    }
 
     // write base node
     output(NT_EXPRESSION_OP, parent_offset, child_index, 0, 1);
@@ -334,12 +387,15 @@ static void parse_expression_op(uint16_t parent_offset, uint8_t child_index) {
     fputc(NULL, ast_ptr);
     next_token();
 
+    // schedule nested expression
+    future_push(NT_EXPRESSION_OP, parent_offset, 0, FUTURE_FLAG_INSERT);
+
     // schedule right term
     future_push(NT_TERM, parent_offset, 0, NULL);
 }
 
 static void parse_expression(uint16_t parent_offset, uint8_t child_index) {
-    // <expression> ::= <term> { ( '+' | '-' ) <term> }
+    // <expression> ::= <term> [ <expression_op> <term> ... ]
     // output: [base node] <*right_term> <*expression_op> <*left_term>
 
     // write base node
@@ -508,7 +564,6 @@ void parse(FILE* src_ptr_arg, FILE* tok_ptr_arg, FILE* out_ptr_arg) {
 
     while(future_stack_count > 0) {
         future_node_s* n = future_pop();
-        printf("%s\n", node_constants[n->node].name);
         switch(n->node) {
             case NT_CONSUME: parse_consume((char)n->flags); break;
             case NT_STATEMENT_LIST: parse_statement_list(n->parent_offset, n->child_index); break;
@@ -516,9 +571,9 @@ void parse(FILE* src_ptr_arg, FILE* tok_ptr_arg, FILE* out_ptr_arg) {
             case NT_DECLARATION: parse_declaration(n->parent_offset, n->child_index); break;
             case NT_ASSIGNMENT: parse_assignment(n->parent_offset, n->child_index); break;
             case NT_EXPRESSION: parse_expression(n->parent_offset, n->child_index); break;
-            case NT_EXPRESSION_OP: parse_expression_op(n->parent_offset, n->child_index); break;
+            case NT_EXPRESSION_OP: parse_expression_op(n->parent_offset, n->child_index, n->flags); break;
             case NT_TERM: parse_term(n->parent_offset, n->child_index); break;
-            case NT_TERM_OP: parse_term_op(n->parent_offset, n->child_index); break;
+            case NT_TERM_OP: parse_term_op(n->parent_offset, n->child_index, n->flags); break;
             case NT_FACTOR: parse_factor(n->parent_offset, n->child_index); break;
             case NT_UNARY_OP: parse_unary_op(n->parent_offset, n->child_index); break;
             case NT_VARIABLE: parse_variable(n->parent_offset, n->child_index); break;

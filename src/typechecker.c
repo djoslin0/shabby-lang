@@ -223,6 +223,7 @@ static void tc_propagate(type_t type) {
 
         // check for exit conditions
         if (type == node.value_type && depth > 0) { return; }
+        if (type < node.value_type && depth > 0) { return; }
         switch (node.node_type) {
             case NT_CAST: if (depth > 0) { return; } else { break; }
             case NT_STATEMENT:

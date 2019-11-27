@@ -21,6 +21,26 @@ static FILE *dot_ptr = NULL; // output for graphviz
 
 static ast_s cur_node = { 0 };
 
+  ////////////////////////////
+ // scheduled future nodes //
+////////////////////////////
+
+static uint16_t future_stack[FUTURE_STACK_SIZE] = { 0 };
+static uint16_t future_stack_count = 0;
+
+static void future_push(uint16_t offset) {
+    if (offset == NULL) { return; }
+    future_stack[future_stack_count] = offset;
+    future_stack_count++;
+    assert(future_stack_count < FUTURE_STACK_SIZE);
+}
+
+static uint16_t future_pop(void) {
+    assert(future_stack_count > 0);
+    future_stack_count--;
+    return future_stack[future_stack_count];
+}
+
   /////////////////////
  // token utilities //
 /////////////////////
@@ -47,11 +67,12 @@ void graph(FILE *ast_ptr_arg, FILE *dot_ptr_arg) {
     fputs("node [shape=Mrecord,style=filled]\n", dot_ptr);
 
     // move past root pointer
-    uint16_t offset = 2;
+    future_push(fget16(ast_ptr));
 
     int bail = 0;
-    while(++bail < 1000) {
+    while(future_stack_count > 0 && ++bail < 1000) {
         // navigate to offset and parse node
+        uint16_t offset = future_pop();
         read_ast_node(ast_ptr, offset, &cur_node);
 
         node_s constants = node_constants[cur_node.node_type];
@@ -79,17 +100,15 @@ void graph(FILE *ast_ptr_arg, FILE *dot_ptr_arg) {
         }
         fprintf(dot_ptr, ">]\n");
 
-        for (int i = 0; i < cur_node.child_count; i++) {
+        for (int i = cur_node.child_count - 1; i >= 0; i--) {
             if (cur_node.children[i] == NULL) { continue; }
             fprintf(dot_ptr, "%d -> %d\n", offset, cur_node.children[i]);
+            future_push(cur_node.children[i]);
         }
 
         if (cur_node.parent_offset != 0) {
             fprintf(dot_ptr, "%d -> %d[penwidth=0.15, arrowhead=curve];\n", offset, cur_node.parent_offset);
         }
-
-        offset = ftell(ast_ptr);
-        if (fgetc(ast_ptr) == EOF) { break; }
     }
     assert(bail < 1000);
 
