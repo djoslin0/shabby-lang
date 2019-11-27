@@ -15,12 +15,6 @@
 static FILE *ast_ptr = NULL; // ast input
 static FILE *dot_ptr = NULL; // output for graphviz
 
-  //////////
- // misc //
-//////////
-
-static ast_s cur_node = { 0 };
-
   ////////////////////////////
  // scheduled future nodes //
 ////////////////////////////
@@ -64,26 +58,27 @@ void graph(FILE *ast_ptr_arg, FILE *dot_ptr_arg) {
 
     // write header
     fputs("digraph L {\n", dot_ptr);
-    fputs("node [shape=Mrecord,style=filled]\n", dot_ptr);
+    fputs("  node [shape=Mrecord,style=filled]\n", dot_ptr);
 
     // move past root pointer
     future_push(fget16(ast_ptr));
 
     int bail = 0;
     while(future_stack_count > 0 && ++bail < 1000) {
+        ast_s node = { 0 };
         // navigate to offset and parse node
         uint16_t offset = future_pop();
-        read_ast_node(ast_ptr, offset, &cur_node);
+        read_ast_node(ast_ptr, offset, &node);
 
-        node_s constants = node_constants[cur_node.node_type];
+        node_s constants = node_constants[node.node_type];
 
-        fprintf(dot_ptr, "%d [", offset);
+        fprintf(dot_ptr, "  %d [", offset);
 
-        switch (cur_node.value_type) {
+        switch (node.value_type) {
             case TYPE_NONE: fprintf(dot_ptr, "fillcolor=\"white\","); break;
             case TYPE_BYTE: fprintf(dot_ptr, "fillcolor=\"#EEFFEE\","); break;
             case TYPE_SHORT: fprintf(dot_ptr, "fillcolor=\"#EEEEFF\","); break;
-            default: printf("%d\n", cur_node.value_type); assert(FALSE);
+            default: printf("%d\n", node.value_type); assert(FALSE);
         }
 
         fprintf(dot_ptr, "label=<%s", constants.name);
@@ -100,14 +95,14 @@ void graph(FILE *ast_ptr_arg, FILE *dot_ptr_arg) {
         }
         fprintf(dot_ptr, ">]\n");
 
-        for (int i = cur_node.child_count - 1; i >= 0; i--) {
-            if (cur_node.children[i] == NULL) { continue; }
-            fprintf(dot_ptr, "%d -> %d\n", offset, cur_node.children[i]);
-            future_push(cur_node.children[i]);
+        for (int i = node.child_count - 1; i >= 0; i--) {
+            if (node.children[i] == NULL) { continue; }
+            fprintf(dot_ptr, "  %d -> %d\n", offset, node.children[i]);
+            future_push(node.children[i]);
         }
 
-        if (cur_node.parent_offset != 0) {
-            fprintf(dot_ptr, "%d -> %d[penwidth=0.15, arrowhead=curve];\n", offset, cur_node.parent_offset);
+        if (node.parent_offset != 0) {
+            fprintf(dot_ptr, "  %d -> %d[penwidth=0.15, arrowhead=curve];\n", offset, node.parent_offset);
         }
     }
     assert(bail < 1000);

@@ -95,16 +95,17 @@ static uint16_t insert_cast(type_t type, uint16_t parent_offset, uint8_t child_i
 ///////////////////////////////
 
 static void ce_propagate(uint32_t value) {
+    ast_s node = cur_node;
     while (TRUE) {
         // search for parent that is type <term> or <expression> and has a <term_op> or a <expression_op>
         bool searching = TRUE;
         while (searching) {
-            read_ast_node(ast_ptr, cur_node.parent_offset, &cur_node);
-            switch (cur_node.node_type) {
+            read_ast_node(ast_ptr, node.parent_offset, &node);
+            switch (node.node_type) {
                 case NT_STATEMENT: return;
                 case NT_TERM:
                 case NT_EXPRESSION:
-                    if (cur_node.children[1] != NULL) { searching = FALSE; }
+                    if (node.children[1] != NULL) { searching = FALSE; }
                     break;
                 case NT_CAST:
                     read_token();
@@ -117,8 +118,8 @@ static void ce_propagate(uint32_t value) {
                     break;
                 case NT_FACTOR:
                     // apply unary op on constant expression value
-                    if (cur_node.children[0] == NULL) { break; }
-                    read_ast_node(ast_ptr, cur_node.children[0], &peeked_node);
+                    if (node.children[0] == NULL) { break; }
+                    read_ast_node(ast_ptr, node.children[0], &peeked_node);
                     read_token();
                     switch (token[0]) {
                         case '-': value = -value; break;
@@ -133,11 +134,11 @@ static void ce_propagate(uint32_t value) {
         if (cur_node.scratch == 0) {
             on_scratch_index++;
             assert(on_scratch_index < MAX_SCRATCH);
-            cur_node.scratch = on_scratch_index;
-            overwrite_scratch(ast_ptr, cur_node.offset, on_scratch_index);
+            node.scratch = on_scratch_index;
+            overwrite_scratch(ast_ptr, node.offset, on_scratch_index);
         }
 
-        const_expr_t* ce = &scratch[cur_node.scratch];
+        const_expr_t* ce = &scratch[node.scratch];
 
         // increment
         ce->constant_count++;
@@ -150,7 +151,7 @@ static void ce_propagate(uint32_t value) {
         }
 
         // retrieve term/expression operator
-        read_ast_node(ast_ptr, cur_node.children[1], &peeked_node);
+        read_ast_node(ast_ptr, node.children[1], &peeked_node);
         read_token();
 
         // evaluate term/expression
@@ -176,7 +177,7 @@ static void ce_propagate(uint32_t value) {
         }
 
         // write type
-        write_ast_type(type, cur_node.offset);
+        write_ast_type(type, node.offset);
 
         // pass this value up to the next term/expression
         value = ce->constant_value;

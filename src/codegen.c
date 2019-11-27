@@ -25,6 +25,7 @@ static FILE *gen_ptr = NULL; // output
 //////////
 
 static ast_s cur_node = { 0 };
+static ast_s peeked_node = { 0 };
 
 #define SIZE_BC(x) (x + cur_node.value_type - 1)
 
@@ -117,8 +118,8 @@ static void gen_cast(void) {
 
     type_t to_type = cur_node.value_type;
 
-    read_ast_node(ast_ptr, cur_node.children[0], &cur_node);
-    type_t from_type = cur_node.value_type;
+    read_ast_node(ast_ptr, cur_node.children[0], &peeked_node);
+    type_t from_type = peeked_node.value_type;
 
     // remember to extend or pop after evaluating child node
     if (types[to_type].size == types[from_type].size) {
@@ -134,7 +135,7 @@ static void gen_cast(void) {
     }
 
     // push the child node
-    future_push(cur_node.offset);
+    future_push(peeked_node.offset);
 }
 
 static void gen_constant(void) {
