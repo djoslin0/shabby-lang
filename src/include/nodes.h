@@ -70,10 +70,12 @@ struct {
     uint16_t parent_offset;
     uint8_t child_count;
     uint16_t children[MAX_AST_CHILDREN];
+    uint16_t scratch;
 } typedef ast_s;
 
 void read_ast_node(FILE*, uint16_t, ast_s*);
 uint16_t write_ast_node(FILE*, node_t, uint16_t, uint8_t, uint8_t, uint8_t);
 void overwrite_child_pointer(FILE*, uint16_t, uint8_t, uint16_t);
+void overwrite_scratch(FILE*, uint16_t, uint16_t);
 
 #endif

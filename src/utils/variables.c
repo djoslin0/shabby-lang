@@ -16,6 +16,7 @@ var_s* get_variable(char* name) {
 
 uint16_t store_variable(type_t type, char* name, uint8_t scope) {
     assert(vars_count < MAX_VARS_IN_SCOPE);
+    assert(get_variable(name) == NULL);
 
     // store type
     vars[vars_count].type = type;

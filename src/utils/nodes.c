@@ -9,6 +9,7 @@ void read_ast_node(FILE* ast_ptr, uint16_t offset, ast_s* result) {
     result->offset = offset;
     result->node_type = fgetc(ast_ptr);
     result->value_type = fgetc(ast_ptr);
+    result->scratch = fget16(ast_ptr);
     result->parent_offset = fget16(ast_ptr);
     result->child_count = fgetc(ast_ptr);
     assert(result->child_count < MAX_AST_CHILDREN);
@@ -31,19 +32,28 @@ static void write_current_offset_to(FILE* ast_ptr, uint16_t write_offset) {
 uint16_t write_ast_node(FILE* ast_ptr, node_t node_type,
                         uint16_t parent_offset, uint8_t child_index,
                         uint8_t child_count, uint8_t symbols) {
-    // output: <node_type> <value_type> <*parent> <child_count>
+    // output: <node_type> <value_type> <scratch> <*parent> <child_count> <children*...>
     uint16_t my_offset = ftell(ast_ptr);
 
+    // write to parent
     if (parent_offset == 0 && child_index == 0) {
         write_current_offset_to(ast_ptr, 0);
     } else {
         write_current_offset_to(ast_ptr,
-                                parent_offset + 5 + (uint16_t)child_index * 2);
+                                parent_offset + 7 + (uint16_t)child_index * 2);
     }
+
+    // write node_type
     fputc(node_type, ast_ptr);
+    // write value_type
     fputc(NULL, ast_ptr);
+    // write scratch
+    fput16(0, ast_ptr);
+    // write parent*
     fput16(parent_offset, ast_ptr);
+    // write child_count
     fputc(child_count, ast_ptr);
+    // write <children*...>
     for (int i = 0; i < child_count; i++) {
         fput16(NULL, ast_ptr);
     }
@@ -55,14 +65,24 @@ void overwrite_child_pointer(FILE* ast_ptr, uint16_t parent_offset,
     uint16_t cur_offset = ftell(ast_ptr);
 
     // write to parent pointer
-    uint16_t offset = parent_offset + 5 + child_index * 2;
+    uint16_t offset = parent_offset + 7 + child_index * 2;
     fseek(ast_ptr, offset, 0);
     fput16(child_offset, ast_ptr);
 
     // write to child pointer
-    offset = child_offset + 2;
+    offset = child_offset + 4;
     fseek(ast_ptr, offset, 0);
     fput16(parent_offset, ast_ptr);
+
+    fseek(ast_ptr, cur_offset, 0);
+}
+
+void overwrite_scratch(FILE* ast_ptr, uint16_t offset, uint16_t scratch) {
+    uint16_t cur_offset = ftell(ast_ptr);
+
+    // write scratch
+    fseek(ast_ptr, offset + 2, 0);
+    fput16(scratch, ast_ptr);
 
     fseek(ast_ptr, cur_offset, 0);
 }

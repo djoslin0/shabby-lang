@@ -2,6 +2,7 @@
 
 cd src
 
+kill `pidof display`
 rm ../bin/*
 
 set -e

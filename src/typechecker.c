@@ -77,41 +77,165 @@ static uint16_t insert_cast(type_t type, uint16_t parent_offset, uint8_t child_i
 
     // overwrite pointers
     overwrite_child_pointer(ast_ptr, cast_offset, 0, child_offset);
+    printf("<inserted cast>\n");
     return cast_offset;
 }
 
-static void write_propagate(type_t type) {
-    uint16_t last_offset = cur_node.offset;
-    write_ast_type(type, cur_node.offset);
+  ///////////////////////////////
+ // constant expression phase //
+///////////////////////////////
+
+#define MAX_SCRATCH 64
+
+struct {
+    uint8_t constant_count;
+    int32_t constant_value;
+} typedef const_expr_t;
+
+static const_expr_t scratch[MAX_SCRATCH] = { 0 };
+static uint8_t on_scratch_index = 0;
+
+static void ce_propagate(uint32_t value) {
+    while (TRUE) {
+        // search for parent that is type <term> or <expression> and has a <term_op> or a <expression_op>
+        bool searching = TRUE;
+        while (searching) {
+            read_ast_node(ast_ptr, cur_node.parent_offset, &cur_node);
+            switch (cur_node.node_type) {
+                case NT_STATEMENT: return;
+                case NT_TERM:
+                case NT_EXPRESSION:
+                    if (cur_node.children[1] != NULL) { searching = FALSE; }
+                    break;
+                case NT_CAST:
+                    read_token();
+                    switch (get_type(token)) {
+                        case TYPE_BYTE: value = (int8_t)value; break;
+                        case TYPE_SHORT: value = (int16_t)value; break;
+                        default: assert(FALSE);
+                    }
+                default: break;
+            }
+        }
+
+        // create scratch structure
+        if (cur_node.scratch == 0) {
+            on_scratch_index++;
+            assert(on_scratch_index < MAX_SCRATCH);
+            cur_node.scratch = on_scratch_index;
+            overwrite_scratch(ast_ptr, cur_node.offset, on_scratch_index);
+        }
+
+        const_expr_t* ce = &scratch[cur_node.scratch];
+
+        // increment
+        ce->constant_count++;
+        assert(ce->constant_count <= 2);
+
+        // this term/expression hasn't been seen by another constant yet, store the value
+        if (ce->constant_count == 1) {
+            ce->constant_value = value;
+            return;
+        }
+
+        // retrieve term/expression operator
+        read_ast_node(ast_ptr, cur_node.children[1], &peeked_node);
+        read_token();
+
+        // evaluate term/expression
+        switch(token[0]) {
+            case '+': ce->constant_value += value; break;
+            case '-': ce->constant_value -= value; break;
+            case '*': ce->constant_value *= value; break;
+            case '/': ce->constant_value /= value; break;
+            default: assert(FALSE);
+        }
+
+        // decide on type
+        type_t type = TYPE_NONE;
+        if (ce->constant_value >= -128 && ce->constant_value <= 127) {
+            type = TYPE_BYTE;
+        } else if (ce->constant_value >= -32768 && ce->constant_value <= 32767) {
+            type = TYPE_SHORT;
+        } else {
+            printf("Type error!\n"
+                   "Constant expression exceeds the largest datatype bounds.\n"
+                   "Evaluated to: %d\n", ce->constant_value);
+            assert(FALSE);
+        }
+
+        // write type
+        write_ast_type(type, cur_node.offset);
+
+        // pass this value up to the next term/expression
+        value = ce->constant_value;
+    }
+}
+
+static void ec_evaluate(void) {
+    // move to root node
+    fseek(ast_ptr, 0, 0);
+    future_push(fget16(ast_ptr));
+
+    int bail = 0;
+    while(future_stack_count > 0 && ++bail < 1000) {
+        uint16_t offset = future_pop();
+        // navigate to offset and parse node
+        read_ast_node(ast_ptr, offset, &cur_node);
+
+        // search children
+        for (int i = 0; i < cur_node.child_count; i++) {
+            future_push(cur_node.children[i]);
+        }
+
+        // extract constant value
+        if (cur_node.node_type == NT_CONSTANT) {
+            int32_t value = 0;
+            assert(fscanf(ast_ptr, "%d", &value) == 1);
+            ce_propagate(value);
+        }
+
+    }
+    assert(bail < 1000);
+}
+
+  //////////////////
+ // typechecking //
+//////////////////
+
+static void tc_propagate(type_t type) {
+    ast_s node = cur_node;
+    uint16_t last_offset = node.offset;
+    write_ast_type(type, node.offset);
     uint8_t depth = 0;
     while (TRUE) {
-        printf("      %s\n", node_constants[cur_node.node_type].name);
+        printf("      %s\n", node_constants[node.node_type].name);
 
         // up-cast last node if it's parent is a larger byte size
-        if (type < cur_node.value_type) {
-            // insert cast between cur_node and last_offset
-            assert(cur_node.child_count > 0);
-            for (uint8_t i = 0; i < cur_node.child_count; i++) {
-                if (cur_node.children[i] == last_offset) {
-                    insert_cast(cur_node.value_type, cur_node.offset, i, last_offset);
+        if (type < node.value_type) {
+            // insert cast between node and last_offset
+            assert(node.child_count > 0);
+            for (uint8_t i = 0; i < node.child_count; i++) {
+                if (node.children[i] == last_offset) {
+                    insert_cast(node.value_type, node.offset, i, last_offset);
                     return;
                 }
             }
         }
 
         // check for exit conditions
-        if (type == cur_node.value_type) { return; }
-        switch (cur_node.node_type) {
+        if (type == node.value_type && depth > 0) { return; }
+        switch (node.node_type) {
             case NT_CAST: if (depth > 0) { return; } else { break; }
             case NT_STATEMENT:
             case NT_DECLARATION:
             case NT_ASSIGNMENT:
                 // check for a type error
-                if (type > cur_node.value_type) {
+                if (type > node.value_type) {
                     printf("\nType error: \n"
-                           "'%s' provided, when '%s' was expected.\n\n",
-                           types[type].name,
-                           types[cur_node.value_type].name);
+                        "'%s' provided, when '%s' was expected.\n\n",
+                        types[type].name,
+                        types[node.value_type].name);
                     assert(FALSE);
                 }
                 return;
@@ -119,13 +243,12 @@ static void write_propagate(type_t type) {
         }
 
         // write out type information
-        write_ast_type(type, cur_node.offset);
-
+        write_ast_type(type, node.offset);
 
         // check children to see if they need to be altered
-        for (uint8_t i = 0; i < cur_node.child_count; i++) {
-            if (cur_node.children[i] == NULL) { continue; }
-            read_ast_node(ast_ptr, cur_node.children[i], &peeked_node);
+        for (uint8_t i = 0; i < node.child_count; i++) {
+            if (node.children[i] == NULL) { continue; }
+            read_ast_node(ast_ptr, node.children[i], &peeked_node);
             switch (peeked_node.node_type) {
                 case NT_EXPRESSION_OP:
                 case NT_TERM_OP:
@@ -137,47 +260,72 @@ static void write_propagate(type_t type) {
                     // cast children who need it
                     if (peeked_node.value_type == TYPE_NONE) { break; }
                     if (type <= peeked_node.value_type) { break; }
-                    insert_cast(type, cur_node.offset, i, peeked_node.offset);
+                    insert_cast(type, node.offset, i, peeked_node.offset);
             }
         }
 
-        last_offset = cur_node.offset;
-        read_ast_node(ast_ptr, cur_node.parent_offset, &cur_node);
+        last_offset = node.offset;
+        read_ast_node(ast_ptr, node.parent_offset, &node);
         depth++;
     }
 }
-
-  //////////////////
- // typechecking //
-//////////////////
 
 static void tc_cast(void) {
     read_token();
     type_t type = get_type(token);
     assert(type != TYPE_NONE);
 
-    write_propagate(type);
+    tc_propagate(type);
 }
 
 static void tc_variable(void) {
     read_token();
     var_s* var = get_variable(token);
     assert(var->type != TYPE_NONE);
-    write_propagate(var->type);
+    tc_propagate(var->type);
 }
 
 static void tc_constant(void) {
-    long value = 0;
-    assert(fscanf(ast_ptr, "%ld", &value) == 1);
+    int32_t value = 0;
+    assert(fscanf(ast_ptr, "%d", &value) == 1);
 
+    // find the first <expression> or <term> with a type
+    read_ast_node(ast_ptr, cur_node.parent_offset, &peeked_node);
+    while (TRUE) {
+        switch (peeked_node.node_type) {
+            case NT_DECLARATION:
+            case NT_ASSIGNMENT:
+            case NT_STATEMENT:
+                goto failed_search;
+            default: break;
+        }
+        printf("%d\n", peeked_node.scratch);
+        if (scratch[peeked_node.scratch].constant_count == 2 && peeked_node.value_type != NULL) {
+            tc_propagate(peeked_node.value_type);
+            return;
+        }
+        read_ast_node(ast_ptr, peeked_node.parent_offset, &peeked_node);
+    }
+
+failed_search:
     // figure out which type to assign to the constant
     if (value >= -128 && value <= 127) {
-        write_propagate(TYPE_BYTE);
+        tc_propagate(TYPE_BYTE);
     } else if (value >= -32768 && value <= 32767) {
-        write_propagate(TYPE_SHORT);
+        tc_propagate(TYPE_SHORT);
     } else {
         assert(FALSE);
     }
+}
+
+static void tc_term(void) {
+    if (cur_node.value_type == TYPE_NONE) { return; }
+    tc_propagate(cur_node.value_type);
+}
+
+static void tc_expression(void) {
+    if (cur_node.value_type == TYPE_NONE) { return; }
+    tc_propagate(cur_node.value_type);
 }
 
 static void tc_assignment(void) {
@@ -201,7 +349,11 @@ static void tc_declaration(void) {
 void typecheck(FILE *ast_ptr_arg) {
     ast_ptr = ast_ptr_arg;
 
+    // evaluate constant expressions
+    ec_evaluate();
+
     // move to root node
+    fseek(ast_ptr, 0, 0);
     future_push(fget16(ast_ptr));
 
     int bail = 0;
@@ -214,6 +366,8 @@ void typecheck(FILE *ast_ptr_arg) {
         switch (cur_node.node_type) {
             case NT_DECLARATION: tc_declaration(); break;
             case NT_ASSIGNMENT: tc_assignment(); break;
+            case NT_EXPRESSION: tc_expression(); break;
+            case NT_TERM: tc_term(); break;
             case NT_VARIABLE: tc_variable(); break;
             case NT_CONSTANT: tc_constant(); break;
             case NT_CAST: tc_cast(); break;

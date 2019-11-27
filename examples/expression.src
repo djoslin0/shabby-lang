@@ -1,1 +1,2 @@
-short xxx = <byte>(333 + 2222 * 3) + 2;
+byte xxx = 3 * 1 + 2 * <byte>200;
+short yyy = xxx - 400;
