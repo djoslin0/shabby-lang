@@ -116,7 +116,7 @@ static void output(bytecode_t type, ...) {
 static void gen_cast(void) {
     type_t to_type = cur_node.value_type;
 
-    read_ast_node(ast_ptr, cur_node.children[0], &peeked_node);
+    ast_read_node(ast_ptr, cur_node.children[0], &peeked_node);
     type_t from_type = peeked_node.value_type;
 
     // remember to extend or pop after evaluating child node
@@ -277,7 +277,7 @@ void gen(FILE* src_ptr_arg, FILE* ast_ptr_arg, FILE* gen_ptr_arg) {
         }
 
         // navigate to offset and parse node
-        read_ast_node(ast_ptr, offset, &cur_node);
+        ast_read_node(ast_ptr, offset, &cur_node);
         printf("                %s:\n", node_constants[cur_node.node_type].name);
         switch(cur_node.node_type) {
             case NT_STATEMENT: gen_statement(); break;

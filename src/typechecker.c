@@ -72,22 +72,16 @@ static void write_ast_type(type_t type, uint16_t offset) {
     fputc(type, ast_ptr);
 }
 
-static uint16_t insert_cast(type_t type, uint16_t parent_offset, uint8_t child_index, uint16_t child_offset) {
-    // write the new cast node
-    fseek(ast_ptr, 0, SEEK_END);
-    uint16_t cast_offset = write_ast_node(ast_ptr, NT_CAST, parent_offset,
-                                          child_index);
-    // insert token into ast file
-    fputs(types[type].name, ast_ptr);
-    fputc(NULL, ast_ptr);
-
-    // write cast's the value type
-    write_ast_type(type, cast_offset);
-
-    // overwrite pointers
-    overwrite_child_pointer(ast_ptr, cast_offset, 0, child_offset);
+static uint16_t insert_cast(type_t type, uint16_t parent_offset, uint16_t child_offset) {
+    ast_s node = { 0 };
+    node.node_type = NT_CAST;
+    node.parent_offset = parent_offset;
+    node.children[0] = child_offset;
+    node.value_type = type;
     printf("<inserted cast>\n");
-    return cast_offset;
+    ast_insert_new_node(ast_ptr, &node);
+    fprintf(ast_ptr, "%s", node_constants[NT_CAST].name);
+    return node.offset;
 }
 
   ///////////////////////////////
@@ -100,7 +94,7 @@ static void ce_propagate(uint32_t value) {
         // search for parent that is type <term> or <expression> and has a <term_op> or a <expression_op>
         bool searching = TRUE;
         while (searching) {
-            read_ast_node(ast_ptr, node.parent_offset, &node);
+            ast_read_node(ast_ptr, node.parent_offset, &node);
             switch (node.node_type) {
                 case NT_STATEMENT: return;
                 case NT_TERM:
@@ -119,7 +113,7 @@ static void ce_propagate(uint32_t value) {
                 case NT_FACTOR:
                     // apply unary op on constant expression value
                     if (node.children[0] == NULL) { break; }
-                    read_ast_node(ast_ptr, node.children[0], &peeked_node);
+                    ast_read_node(ast_ptr, node.children[0], &peeked_node);
                     read_token();
                     switch (token[0]) {
                         case '-': value = -value; break;
@@ -135,7 +129,7 @@ static void ce_propagate(uint32_t value) {
             on_scratch_index++;
             assert(on_scratch_index < MAX_SCRATCH);
             node.scratch = on_scratch_index;
-            overwrite_scratch(ast_ptr, node.offset, on_scratch_index);
+            ast_overwrite_scratch(ast_ptr, node.offset, on_scratch_index);
         }
 
         const_expr_t* ce = &scratch[node.scratch];
@@ -151,7 +145,7 @@ static void ce_propagate(uint32_t value) {
         }
 
         // retrieve term/expression operator
-        read_ast_node(ast_ptr, node.children[1], &peeked_node);
+        ast_read_node(ast_ptr, node.children[1], &peeked_node);
         read_token();
 
         // evaluate term/expression
@@ -193,7 +187,7 @@ static void ec_evaluate(void) {
     while(future_stack_count > 0 && ++bail < 1000) {
         uint16_t offset = future_pop();
         // navigate to offset and parse node
-        read_ast_node(ast_ptr, offset, &cur_node);
+        ast_read_node(ast_ptr, offset, &cur_node);
 
         // search children
         uint8_t child_count = node_constants[cur_node.node_type].child_count;
@@ -250,7 +244,7 @@ static void tc_propagate(type_t type) {
         uint8_t child_count = node_constants[node.node_type].child_count;
         for (uint8_t i = 0; i < child_count; i++) {
             if (node.children[i] == NULL) { continue; }
-            read_ast_node(ast_ptr, node.children[i], &peeked_node);
+            ast_read_node(ast_ptr, node.children[i], &peeked_node);
             switch (peeked_node.node_type) {
                 case NT_EXPRESSION_OP:
                 case NT_TERM_OP:
@@ -263,7 +257,7 @@ static void tc_propagate(type_t type) {
         }
 
         // iterate
-        read_ast_node(ast_ptr, node.parent_offset, &node);
+        ast_read_node(ast_ptr, node.parent_offset, &node);
         depth++;
     }
 }
@@ -288,10 +282,10 @@ static void tc_constant(void) {
     assert(fscanf(ast_ptr, "%d", &value) == 1);
 
     // apply unary op of factor
-    read_ast_node(ast_ptr, cur_node.parent_offset, &peeked_node);
+    ast_read_node(ast_ptr, cur_node.parent_offset, &peeked_node);
     assert(peeked_node.node_type == NT_FACTOR);
     if (peeked_node.children[0] != NULL) {
-        read_ast_node(ast_ptr, peeked_node.children[0], &peeked_node);
+        ast_read_node(ast_ptr, peeked_node.children[0], &peeked_node);
         read_token();
         switch (token[0]) {
             case '-': value = -value; break;
@@ -300,7 +294,7 @@ static void tc_constant(void) {
     }
 
     // find the first <expression> or <term> with a type
-    read_ast_node(ast_ptr, cur_node.parent_offset, &peeked_node);
+    ast_read_node(ast_ptr, cur_node.parent_offset, &peeked_node);
     while (TRUE) {
         switch (peeked_node.node_type) {
             case NT_DECLARATION:
@@ -314,7 +308,7 @@ static void tc_constant(void) {
             tc_propagate(peeked_node.value_type);
             return;
         }
-        read_ast_node(ast_ptr, peeked_node.parent_offset, &peeked_node);
+        ast_read_node(ast_ptr, peeked_node.parent_offset, &peeked_node);
     }
 
 failed_search:
@@ -365,7 +359,7 @@ static void tc_evaluate(void) {
     while(future_stack_count > 0 && ++bail < 1000) {
         uint16_t offset = future_pop();
         // navigate to offset and parse node
-        read_ast_node(ast_ptr, offset, &cur_node);
+        ast_read_node(ast_ptr, offset, &cur_node);
         printf("\n");
         printf("%04X: %s\n", offset, node_constants[cur_node.node_type].name);
         switch (cur_node.node_type) {
@@ -399,7 +393,7 @@ static void cast_evaluate(void) {
     while(future_stack_count > 0 && ++bail < 1000) {
         uint16_t offset = future_pop();
         // navigate to offset and parse node
-        read_ast_node(ast_ptr, offset, &cur_node);
+        ast_read_node(ast_ptr, offset, &cur_node);
 
         // search children
         uint8_t child_count = node_constants[cur_node.node_type].child_count;
@@ -411,13 +405,13 @@ static void cast_evaluate(void) {
             // figure out if we need to cast
             if (cur_node.node_type == NT_CAST) { continue; }
             if (cur_node.value_type == TYPE_NONE) { continue; }
-            read_ast_node(ast_ptr, cur_node.children[i], &peeked_node);
+            ast_read_node(ast_ptr, cur_node.children[i], &peeked_node);
 
             // only up-cast
             if (peeked_node.value_type == TYPE_NONE) { continue; }
             if (peeked_node.value_type == cur_node.value_type) { continue; }
             assert(peeked_node.value_type < cur_node.value_type);
-            insert_cast(cur_node.value_type, cur_node.offset, i, peeked_node.offset);
+            insert_cast(cur_node.value_type, cur_node.offset, peeked_node.offset);
         }
 
     }

@@ -143,11 +143,9 @@ static void peek_token(uint16_t index) {
     peeked_token.next_index = index + 1;
 }
 
-static uint16_t output(node_t node_type, uint16_t parent_offset,
-                   uint8_t child_index) {
+static uint16_t output(node_t node_type, uint16_t parent_offset, uint8_t child_index) {
     DPRINT(node_constants[node_type].name, node_constants[node_type].output_token_count);
-    return write_ast_node(ast_ptr, node_type, parent_offset,
-                          child_index);
+    return ast_new_node(ast_ptr, node_type, parent_offset, child_index);
 }
 
   ///////////////////////////
@@ -287,28 +285,15 @@ static void parse_term_op(uint16_t parent_offset, uint8_t child_index, uint8_t f
 
     // check to see if this is a nested term
     if (flags & FUTURE_FLAG_INSERT) {
-        uint16_t child_term = parent_offset;
+        ast_s parent_node = { 0 };
+        ast_read_node(ast_ptr, parent_offset, &parent_node);
 
-        // read grand parent
-        ast_s node = { 0 };
-        read_ast_node(ast_ptr, parent_offset, &node);
-        read_ast_node(ast_ptr, node.parent_offset, &node);
-        fseek(ast_ptr, 0, SEEK_END);
-
-        // overwrite old term's parent to point to new term
-        uint8_t child_count = node_constants[node.node_type].child_count;
-        for (uint8_t i = 0; i < child_count; i++) {
-            if (node.children[i] == child_term) {
-                // add any new nodes to this new term instead of the previous one
-                parent_offset = output(NT_TERM, node.offset, i);
-                child_index = 1;
-                break;
-            }
-        }
-        assert(parent_offset != child_term);
-
-        // place old term as child of new term
-        overwrite_child_pointer(ast_ptr, parent_offset, 2, child_term);
+        ast_s term_node = { 0 };
+        term_node.node_type = NT_TERM;
+        term_node.parent_offset = parent_node.parent_offset;
+        term_node.children[2] = parent_node.offset;
+        parent_offset = ast_insert_new_node(ast_ptr, &term_node);
+        child_index = 1;
     }
 
     // write base node
@@ -356,28 +341,15 @@ static void parse_expression_op(uint16_t parent_offset, uint8_t child_index, uin
 
     // check to see if this is a nested expression
     if (flags & FUTURE_FLAG_INSERT) {
-        uint16_t child_expression = parent_offset;
+        ast_s parent_node = { 0 };
+        ast_read_node(ast_ptr, parent_offset, &parent_node);
 
-        // read grand parent
-        ast_s node = { 0 };
-        read_ast_node(ast_ptr, parent_offset, &node);
-        read_ast_node(ast_ptr, node.parent_offset, &node);
-        fseek(ast_ptr, 0, SEEK_END);
-
-        // overwrite old term's parent to point to new expression
-        uint8_t child_count = node_constants[node.node_type].child_count;
-        for (uint8_t i = 0; i < child_count; i++) {
-            if (node.children[i] == child_expression) {
-                // add any new nodes to this new expression instead of the previous one
-                parent_offset = output(NT_EXPRESSION, node.offset, i);
-                child_index = 1;
-                break;
-            }
-        }
-        assert(parent_offset != child_expression);
-
-        // place old expression as child of new expression
-        overwrite_child_pointer(ast_ptr, parent_offset, 2, child_expression);
+        ast_s expression_node = { 0 };
+        expression_node.node_type = NT_EXPRESSION;
+        expression_node.parent_offset = parent_node.parent_offset;
+        expression_node.children[2] = parent_node.offset;
+        parent_offset = ast_insert_new_node(ast_ptr, &expression_node);
+        child_index = 1;
     }
 
     // write base node

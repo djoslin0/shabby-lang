@@ -68,7 +68,7 @@ void graph(FILE *ast_ptr_arg, FILE *dot_ptr_arg) {
         ast_s node = { 0 };
         // navigate to offset and parse node
         uint16_t offset = future_pop();
-        read_ast_node(ast_ptr, offset, &node);
+        ast_read_node(ast_ptr, offset, &node);
 
         node_s constants = node_constants[node.node_type];
 

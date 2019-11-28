@@ -73,9 +73,19 @@ struct {
     uint16_t scratch;
 } typedef ast_s;
 
-void read_ast_node(FILE*, uint16_t, ast_s*);
-uint16_t write_ast_node(FILE*, node_t, uint16_t, uint8_t);
-void overwrite_child_pointer(FILE*, uint16_t, uint8_t, uint16_t);
-void overwrite_scratch(FILE*, uint16_t, uint16_t);
+#define AST_ADDR_NODE_TYPE(x) (x)
+#define AST_ADDR_VALUE_TYPE(x) (AST_ADDR_NODE_TYPE(x) + 1)
+#define AST_ADDR_SCRATCH(x) (AST_ADDR_VALUE_TYPE(x) + 1)
+#define AST_ADDR_PARENT(x) (AST_ADDR_SCRATCH(x) + 2)
+#define AST_ADDR_CHILD(x, y) ((x == 0) \
+                          ? 0 \
+                          : (AST_ADDR_PARENT(x) + 2 + (uint16_t)y * 2))
+
+
+
+void ast_read_node(FILE*, uint16_t, ast_s*);
+uint16_t ast_new_node(FILE*, node_t, uint16_t, uint8_t);
+uint16_t ast_insert_new_node(FILE*, ast_s*);
+void ast_overwrite_scratch(FILE*, uint16_t, uint16_t);
 
 #endif
