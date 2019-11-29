@@ -11,15 +11,20 @@ void ast_read_node(FILE* ast_ptr, uint16_t offset, ast_s* result) {
     result->value_type = fgetc(ast_ptr);
     result->scratch = fget16(ast_ptr);
     result->parent_offset = fget16(ast_ptr);
+
     memset(result->children, NULL, MAX_AST_CHILDREN * sizeof(uint16_t));
     uint8_t child_count = node_constants[result->node_type].child_count;
     for (int i = 0; i < child_count; i++) {
         result->children[i] = fget16(ast_ptr);
     }
+    uint8_t param_count = node_constants[result->node_type].param_count;
+    if (param_count > 0) {
+        fseek(ast_ptr, param_count * sizeof(uint16_t), SEEK_CUR);
+    }
 }
 
 static void ast_rewrite_node(FILE* ast_ptr, ast_s* node) {
-    // output: <node_type> <value_type> <scratch> <*parent> <children*...>
+    // output: <node_type> <value_type><scratch> <*parent> <children*...>
     fseek(ast_ptr, node->offset, 0);
 
     // write node_type
@@ -50,6 +55,7 @@ uint16_t ast_new_node(FILE* ast_ptr, node_t node_type, uint16_t parent_offset, u
 
     // write new node
     ast_rewrite_node(ast_ptr, &node);
+    for (int i = 0; i < node_constants[node_type].param_count; i++) { fput16(0, ast_ptr); }
 
     // write to parent
     fseek(ast_ptr, AST_ADDR_CHILD(parent_offset, child_index), 0);
@@ -98,6 +104,7 @@ found:
     // write new node
     node->offset = my_offset;
     ast_rewrite_node(ast_ptr, node);
+    for (int i = 0; i < node_constants[node->node_type].param_count; i++) { fput16(0, ast_ptr); }
 
     // write to parent
     fseek(ast_ptr, AST_ADDR_CHILD(node->parent_offset, parents_child_index), 0);
@@ -120,6 +127,32 @@ void ast_overwrite_scratch(FILE* ast_ptr, uint16_t offset, uint16_t value) {
 
     // write scratch
     fseek(ast_ptr, AST_ADDR_SCRATCH(offset), 0);
+    fput16(value, ast_ptr);
+
+    // reset the fp
+    fseek(ast_ptr, return_offset, 0);
+}
+
+uint16_t ast_get_param(FILE* ast_ptr, node_t node_type, uint16_t offset, uint8_t param_index) {
+    // save the fp
+    uint16_t return_offset = ftell(ast_ptr);
+
+    // read byte_size
+    fseek(ast_ptr, AST_ADDR_PARAM(node_type, offset, param_index), 0);
+    uint16_t value = fget16(ast_ptr);
+
+    // reset the fp
+    fseek(ast_ptr, return_offset, 0);
+
+    return value;
+}
+
+void ast_set_param(FILE* ast_ptr, node_t node_type, uint16_t offset, uint8_t param_index, uint16_t value) {
+    // save the fp
+    uint16_t return_offset = ftell(ast_ptr);
+
+    // read byte_size
+    fseek(ast_ptr, AST_ADDR_PARAM(node_type, offset, param_index), 0);
     fput16(value, ast_ptr);
 
     // reset the fp

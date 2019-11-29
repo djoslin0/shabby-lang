@@ -415,7 +415,7 @@ static void parse_assignment(uint16_t parent_offset, uint8_t child_index) {
 }
 
 static void parse_declaration(uint16_t parent_offset, uint8_t child_index) {
-    // <declaration> ::= <var_type> <identifier> '=' <expression>
+    // <declaration> ::= <var_type> <identifier> [ '=' <expression> ]
     // output: [base node] <*expression> <var_type_token> <var_identifier>
 
     // write base node
@@ -438,16 +438,15 @@ static void parse_declaration(uint16_t parent_offset, uint8_t child_index) {
     fputc(NULL, ast_ptr);
     next_token();
 
-    // ensure we set the variable
-    assert(cur_token.string[0] == '=' && cur_token.string[1] == NULL);
-    next_token();
-
-    // schedule expression
-    future_push(NT_EXPRESSION, my_offset, 0, NULL);
+    // setting variable
+    if (cur_token.string[0] == '=' && cur_token.string[1] == NULL) {
+        future_push(NT_EXPRESSION, my_offset, 0, NULL);
+        next_token();
+    }
 }
 
 static void parse_statement(uint16_t parent_offset, uint8_t child_index, uint8_t flags) {
-    // <statement> ::= <declaration> ';'
+    // <statement> ::= <declaration | assignment> ';'
     // output: [base node] <*next_statement> <*assignment | *declaration>
 
     if (!is_identifier(cur_token.string)) { return; }
@@ -465,6 +464,12 @@ static void parse_statement(uint16_t parent_offset, uint8_t child_index, uint8_t
     INDENT(1);
     future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL, NULL);
     #endif
+
+    // schedule class
+    if (!strcmp(cur_token.string, "class")) {
+        future_push(NT_CLASS, my_offset, 1, NULL);
+        return;
+    }
 
     // expect ';' at the end
     future_push(NT_CONSUME, NULL, NULL, ';');
@@ -493,6 +498,37 @@ static void parse_statement_list(uint16_t parent_offset, uint8_t child_index) {
 
     // schedule statement
     future_push(NT_STATEMENT, parent_offset, child_index, FUTURE_FLAG_STATEMENTS);
+}
+
+static void parse_class(uint16_t parent_offset, uint8_t child_index) {
+    // <class> ::= class <identifier> '{' <statement_list> '}'
+    // output: [base node] <*statement_list> <class_identifier>
+
+    // write base node
+    uint16_t my_offset = output(NT_CLASS, parent_offset, child_index);
+
+    // indentation
+    #ifdef DEBUG
+    future_push(NT_DEBUG_UNINDENT_NODE, NULL, NULL, NULL);
+    #endif
+
+    // verify class token
+    assert(!strcmp(cur_token.string, "class"));
+    next_token();
+
+    // output class identifier
+    assert(is_identifier(cur_token.string));
+    fputs(cur_token.string, ast_ptr); // class identifier
+    fputc(NULL, ast_ptr);
+    next_token();
+
+    // read class
+    assert(cur_token.string[0] == '{' && cur_token.string[1] == NULL);
+    // expect '}' at the end
+    future_push(NT_CONSUME, NULL, NULL, '}');
+    future_push(NT_STATEMENT_LIST, my_offset, 0, NULL);
+
+    next_token();
 }
 
 static void parse_consume(char c) {
@@ -539,6 +575,7 @@ void parse(FILE* src_ptr_arg, FILE* tok_ptr_arg, FILE* out_ptr_arg) {
         future_node_s* n = future_pop();
         switch(n->node) {
             case NT_CONSUME: parse_consume((char)n->flags); break;
+            case NT_CLASS: parse_class(n->parent_offset, n->child_index); break;
             case NT_STATEMENT_LIST: parse_statement_list(n->parent_offset, n->child_index); break;
             case NT_STATEMENT: parse_statement(n->parent_offset, n->child_index, n->flags); break;
             case NT_DECLARATION: parse_declaration(n->parent_offset, n->child_index); break;

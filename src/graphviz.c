@@ -70,20 +70,33 @@ void graph(FILE *ast_ptr_arg, FILE *dot_ptr_arg) {
         uint16_t offset = future_pop();
         ast_read_node(ast_ptr, offset, &node);
 
+        // write node header
         node_s constants = node_constants[node.node_type];
+        fprintf(dot_ptr, "  %d [label=<%s", offset, constants.name);
 
-        fprintf(dot_ptr, "  %d [", offset);
-
-        switch (node.value_type) {
-            case TYPE_NONE: fprintf(dot_ptr, "fillcolor=\"white\","); break;
-            case TYPE_BYTE: fprintf(dot_ptr, "fillcolor=\"#EEFFEE\","); break;
-            case TYPE_SHORT: fprintf(dot_ptr, "fillcolor=\"#EEEEFF\","); break;
-            default: printf("%d\n", node.value_type); assert(FALSE);
+        // write info header
+        if (constants.param_count > 0 || constants.output_token_count > 0) {
+            fputs("<br/><font point-size='10'>", dot_ptr);
         }
 
-        fprintf(dot_ptr, "label=<%s", constants.name);
+        // write params
+        if (constants.param_count > 0) {
+            for (int i = 0; i < constants.param_count; i++) {
+                uint16_t param = ast_get_param(ast_ptr, node.node_type, node.offset, i);
+                fprintf(dot_ptr, "%d", param);
+                if (i != constants.param_count - 1) {
+                    fputs(", ", dot_ptr);
+                }
+            }
+        }
+
+        // write space between params and tokens
+        if (constants.param_count > 0 && constants.output_token_count > 0) {
+            fputs(", ", dot_ptr);
+        }
+
+        // write tokens
         if (constants.output_token_count > 0) {
-            fputs("<br/><font point-size='10'>", dot_ptr);
             for (int i = 0; i < constants.output_token_count; i++) {
                 read_token();
                 fprintf(dot_ptr, "%s", token);
@@ -91,19 +104,39 @@ void graph(FILE *ast_ptr_arg, FILE *dot_ptr_arg) {
                     fputs(" ", dot_ptr);
                 }
             }
+        }
+
+        // write info footer
+        if (constants.param_count > 0 || constants.output_token_count > 0) {
             fputs("</font>", dot_ptr);
         }
-        fprintf(dot_ptr, ">]\n");
 
+        // write end of label
+        fprintf(dot_ptr, ">");
+
+        // fill color with type
+        switch (node.value_type) {
+            case TYPE_NONE: fprintf(dot_ptr, ", fillcolor=\"white\""); break;
+            case TYPE_BYTE: fprintf(dot_ptr, ", fillcolor=\"#EEFFEE\""); break;
+            case TYPE_SHORT: fprintf(dot_ptr, ", fillcolor=\"#EEEEFF\""); break;
+            default: printf("%d\n", node.value_type); assert(FALSE);
+        }
+
+        // write node footer
+        fprintf(dot_ptr, "]\n");
+
+        // write children
         for (int i = node_constants[node.node_type].child_count - 1; i >= 0; i--) {
             if (node.children[i] == NULL) { continue; }
             fprintf(dot_ptr, "  %d -> %d\n", offset, node.children[i]);
             future_push(node.children[i]);
         }
 
+        // write parent
         if (node.parent_offset != 0) {
             fprintf(dot_ptr, "  %d -> %d[penwidth=0.15, arrowhead=curve];\n", offset, node.parent_offset);
         }
+
     }
     assert(bail < 1000);
 
