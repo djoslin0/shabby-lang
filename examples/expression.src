@@ -1,1 +1,13 @@
-byte a = 1;
+
+class bar {
+    foo b;
+    byte barA;
+    baz ahh;
+    class baz {
+        foo c;
+    }
+}
+
+class foo {
+    byte a;
+}

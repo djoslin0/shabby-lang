@@ -21,11 +21,11 @@ gcc parser.c utils/symbols.c utils/file.c utils/nodes.c -I include -o "../bin/pa
 ../bin/parser $1
 
 echo ""
-echo "###############"
-echo "# Typechecker #"
-echo "###############"
-gcc typechecker.c utils/symbols.c utils/file.c utils/nodes.c utils/types.c utils/variables.c -I include -o "../bin/typec" -Wall -Werror -Wpedantic
-../bin/typec $1
+echo "##########"
+echo "# Symgen #"
+echo "##########"
+gcc symgen.c utils/symbols.c utils/file.c utils/nodes.c utils/types.c utils/variables.c -I include -o "../bin/symgen" -Wall -Werror -Wpedantic
+../bin/symgen $1
 
 # only generates graph if graphviz is installed
 if hash dot 2>/dev/null; then

@@ -33,6 +33,7 @@ enum {
 
 #define NTP_DECLARATION_BYTES 0
 #define NTP_CLASS_BYTES 0
+#define NTP_CLASS_PENDING 1
 
 #ifdef DEBUG
 struct {
@@ -50,7 +51,7 @@ static node_s node_constants[] = {
     [NT_STATEMENT_LIST] = { "statement_list", 0, 0, 0 },
 
     // Shared
-    [NT_CLASS] = { "class", 1, 1, 1 },
+    [NT_CLASS] = { "class", 1, 2, 1 },
     [NT_STATEMENT] = { "statement", 2, 0, 0 },
     [NT_DECLARATION] = { "declaration", 1, 1, 2 },
     [NT_ASSIGNMENT] = { "assignment", 1, 0, 1 },

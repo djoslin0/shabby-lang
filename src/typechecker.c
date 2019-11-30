@@ -67,7 +67,7 @@ static void read_token(void) {
  // write utilities //
 /////////////////////
 
-static void write_ast_type(type_t type, uint16_t offset) {
+static void ast_write_type(type_t type, uint16_t offset) {
     fseek(ast_ptr, offset + 1, 0);
     fputc(type, ast_ptr);
 }
@@ -171,7 +171,7 @@ static void ce_propagate(uint32_t value) {
         }
 
         // write type
-        write_ast_type(type, node.offset);
+        ast_write_type(type, node.offset);
 
         // pass this value up to the next term/expression
         value = ce->constant_value;
@@ -212,7 +212,7 @@ static void ec_evaluate(void) {
 
 static void tc_propagate(type_t type) {
     ast_s node = cur_node;
-    write_ast_type(type, node.offset);
+    ast_write_type(type, node.offset);
     uint8_t depth = 0;
     while (TRUE) {
         printf("      %s\n", node_constants[node.node_type].name);
@@ -238,7 +238,7 @@ static void tc_propagate(type_t type) {
         }
 
         // write out type information
-        write_ast_type(type, node.offset);
+        ast_write_type(type, node.offset);
 
         // check children to see if they need to be altered
         uint8_t child_count = node_constants[node.node_type].child_count;
@@ -250,7 +250,7 @@ static void tc_propagate(type_t type) {
                 case NT_TERM_OP:
                 case NT_UNARY_OP:
                     // always set operators to the same type as their parent
-                    write_ast_type(type, peeked_node.offset);
+                    ast_write_type(type, peeked_node.offset);
                     break;
                 default: break;
             }
@@ -336,7 +336,7 @@ static void tc_assignment(void) {
     read_token();
     var_s* var = get_variable(token);
     assert(var->type != TYPE_NONE);
-    write_ast_type(var->type, cur_node.offset);
+    ast_write_type(var->type, cur_node.offset);
 }
 
 static void tc_declaration(void) {
@@ -347,7 +347,7 @@ static void tc_declaration(void) {
     read_token();
     store_variable(type, token, 0);
 
-    write_ast_type(type, cur_node.offset);
+    ast_write_type(type, cur_node.offset);
 }
 
 static void tc_evaluate(void) {
