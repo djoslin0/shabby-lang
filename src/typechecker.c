@@ -34,6 +34,8 @@ static uint8_t on_scratch_index = 0;
  // scheduled future nodes //
 ////////////////////////////
 
+#define FUTURE_SCOPE_DECREMENT ((uint16_t)-1)
+
 static uint16_t future_stack[FUTURE_STACK_SIZE] = { 0 };
 static uint16_t future_stack_count = 0;
 
@@ -249,6 +251,7 @@ static void tc_propagate(type_t type) {
                 case NT_EXPRESSION_OP:
                 case NT_TERM_OP:
                 case NT_UNARY_OP:
+                    if (type == TYPE_USER_DEFINED) { assert(FALSE); }
                     // always set operators to the same type as their parent
                     ast_write_type(type, peeked_node.offset);
                     break;
@@ -342,12 +345,19 @@ static void tc_assignment(void) {
 static void tc_declaration(void) {
     read_token();
     type_t type = get_type(token);
-    assert(type != TYPE_NONE);
+    if (type == TYPE_NONE) {
+        type = TYPE_USER_DEFINED;
+    }
 
     read_token();
-    store_variable(type, token, 0);
+    store_variable(type, token);
 
     ast_write_type(type, cur_node.offset);
+}
+
+static void tc_class(void) {
+    scope_increment();
+    future_push(FUTURE_SCOPE_DECREMENT);
 }
 
 static void tc_evaluate(void) {
@@ -358,11 +368,16 @@ static void tc_evaluate(void) {
     int bail = 0;
     while(future_stack_count > 0 && ++bail < 1000) {
         uint16_t offset = future_pop();
+        if (offset == FUTURE_SCOPE_DECREMENT) {
+            scope_decrement();
+            continue;
+        }
         // navigate to offset and parse node
         ast_read_node(ast_ptr, offset, &cur_node);
         printf("\n");
         printf("%04X: %s\n", offset, node_constants[cur_node.node_type].name);
         switch (cur_node.node_type) {
+            case NT_CLASS: tc_class(); break;
             case NT_DECLARATION: tc_declaration(); break;
             case NT_ASSIGNMENT: tc_assignment(); break;
             case NT_EXPRESSION: tc_expression(); break;

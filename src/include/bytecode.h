@@ -16,7 +16,14 @@ enum {
     BC_NOOP = 0,
     BC_EXTEND,
 
-    // stack
+    // jumps
+    BC_JUMP,
+    BC_IJUMP,
+    BC_LABEL,
+
+    // stack basics
+    BC_PUSH_ZEROS,
+
     BC_PUSH8,
     BC_PUSH16,
 
@@ -58,7 +65,14 @@ static bytecode_s bytecode[] = {
     [BC_NOOP] = { 0, 0, DBG_STR("noop") },
     [BC_EXTEND] = { 0, 1, DBG_STR("extend") },
 
-    // stack
+    // jumps
+    [BC_JUMP] = { 0, 0, DBG_STR("jump") },
+    [BC_IJUMP] = { 1, 2, DBG_STR("ijump") },
+    [BC_LABEL] = { 1, 2, DBG_STR("label") },
+
+    // stack basics
+    [BC_PUSH_ZEROS] = { 1, 2, DBG_STR("push_zeros") },
+
     [BC_PUSH8] = { 1, 1, DBG_STR("push8") },
     [BC_PUSH16] = { 1, 2, DBG_STR("push16") },
 

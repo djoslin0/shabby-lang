@@ -10,7 +10,7 @@
  // file pointers //
 ///////////////////
 
-static FILE *gen_ptr = NULL; // gen bytecode
+static FILE *bin_ptr = NULL; // binary bytecode
 
   //////////////////////
  // evaluation stack //
@@ -83,19 +83,25 @@ static void eval_set16(uint16_t index, uint16_t value) {
 // misc
 static void vm_extend(void) { ((int8_t)eval_get8(eval_stack_count - 1)) >= 0 ? eval_push8(0) : eval_push8((uint8_t)-1); }
 
-// stack
-static void vm_push8(void) { eval_push8(fgetc(gen_ptr)); }
+// jumps
+static void vm_jump(void) { fseek(bin_ptr, eval_pop16(), 0); }
+static void vm_ijump(void) { fseek(bin_ptr, fget16(bin_ptr), 0); }
+
+// stack basics
+static void vm_push_zeros(void) { uint16_t zeros = fget16(bin_ptr); while (zeros-- > 0) { eval_push8(0); } }
+
+static void vm_push8(void) { eval_push8(fgetc(bin_ptr)); }
 static void vm_pop8(void) { eval_pop8(); }
 
-static void vm_push16(void) { eval_push16(fget16(gen_ptr)); }
+static void vm_push16(void) { eval_push16(fget16(bin_ptr)); }
 static void vm_pop16(void) { eval_pop16(); }
 
 // pointers
-static void vm_iget8(void) { eval_push8(eval_get8(fget16(gen_ptr))); }
+static void vm_iget8(void) { eval_push8(eval_get8(fget16(bin_ptr))); }
 static void vm_get8(void) { eval_push8(eval_get8(eval_pop16())); }
 static void vm_set8(void) { eval_set8(eval_pop16(), eval_pop8()); }
 
-static void vm_iget16(void) { eval_push16(eval_get16(fget16(gen_ptr))); }
+static void vm_iget16(void) { eval_push16(eval_get16(fget16(bin_ptr))); }
 static void vm_get16(void) { eval_push16(eval_get16(eval_pop16())); }
 static void vm_set16(void) { eval_set16(eval_pop16(), eval_pop16()); }
 
@@ -112,8 +118,8 @@ static void vm_sub16(void) { eval_push16(eval_pop16() - eval_pop16()); }
 static void vm_mul16(void) { eval_push16(eval_pop16() * eval_pop16()); }
 static void vm_div16(void) { eval_push16(eval_pop16() / eval_pop16()); }
 
-void vm(FILE* gen_ptr_arg) {
-    gen_ptr = gen_ptr_arg;
+void vm(FILE* bin_ptr_arg) {
+    bin_ptr = bin_ptr_arg;
 
     // print vm header
     #ifdef DEBUG
@@ -123,7 +129,7 @@ void vm(FILE* gen_ptr_arg) {
     #endif
 
     while (TRUE) {
-        bytecode_t type = fgetc(gen_ptr);
+        bytecode_t type = fgetc(bin_ptr);
         if (type == (bytecode_t)EOF) { break; }
 
         switch (type) {
@@ -131,7 +137,13 @@ void vm(FILE* gen_ptr_arg) {
             case BC_NOOP: break;
             case BC_EXTEND: vm_extend(); break;
 
-            // stack
+            // jumps
+            case BC_JUMP: vm_jump(); break;
+            case BC_IJUMP: vm_ijump(); break;
+
+            // stack basics
+            case BC_PUSH_ZEROS: vm_push_zeros(); break;
+
             case BC_PUSH8: vm_push8(); break;
             case BC_POP8: vm_pop8(); break;
 
@@ -160,7 +172,11 @@ void vm(FILE* gen_ptr_arg) {
             case BC_MUL16: vm_mul16(); break;
             case BC_DIV16: vm_div16(); break;
 
+            // misc
             case BC_EOF: return;
+
+            // does not run in VM
+            case BC_LABEL: assert(FALSE);
         }
         #ifdef DEBUG
             printf("%s", bytecode[type].name);
@@ -179,12 +195,12 @@ void vm(FILE* gen_ptr_arg) {
 int main(int argc, char *argv[]) {
     assert(argc == 2);
 
-    char gen_buffer[128] = { 0 };
-    sprintf(gen_buffer, "../bin/%s.gen", argv[1]);
-    gen_ptr = fopen(gen_buffer, "rb");
+    char bin_buffer[128] = { 0 };
+    sprintf(bin_buffer, "../bin/%s.bin", argv[1]);
+    bin_ptr = fopen(bin_buffer, "rb");
 
-    vm(gen_ptr);
+    vm(bin_ptr);
 
-    fclose(gen_ptr);
+    fclose(bin_ptr);
     return 0;
 }

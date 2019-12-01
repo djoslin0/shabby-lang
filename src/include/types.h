@@ -5,6 +5,9 @@ enum {
     TYPE_NONE,
     TYPE_BYTE,
     TYPE_SHORT,
+    //TYPE_INT,
+    //TYPE_FLOAT,
+    TYPE_USER_DEFINED,
 } typedef type_t;
 
 struct {
@@ -13,6 +16,7 @@ struct {
 } typedef type_s;
 
 static type_s types[] = {
+    [TYPE_USER_DEFINED] = { .size = 0, .name = "@USER" },
     [TYPE_BYTE] = { .size = 1, .name = "byte" },
     [TYPE_SHORT] = { .size = 2, .name = "short" },
     //[TYPE_INT] = { .size = 4, .name = "int" },

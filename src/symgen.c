@@ -78,27 +78,6 @@ static future_info_s future_pop(void) {
     return future_stack[future_stack_count];
 }
 
-  //////////////////////////////////
- // scheduled undiscovered nodes //
-//////////////////////////////////
-/*
-#define UNDISCOVERED_STACK_SIZE (FUTURE_STACK_SIZE / 2)
-static uint16_t undiscovered_stack[UNDISCOVERED_STACK_SIZE] = { 0 };
-static uint16_t undiscovered_stack_count = 0;
-
-static void undiscovered_push(uint16_t offset) {
-    if (offset == NULL) { return; }
-    undiscovered_stack[undiscovered_stack_count] = offset;
-    undiscovered_stack_count++;
-    assert(undiscovered_stack_count < UNDISCOVERED_STACK_SIZE);
-}
-
-static uint16_t undiscovered_pop(void) {
-    assert(undiscovered_stack_count > 0);
-    undiscovered_stack_count--;
-    return undiscovered_stack[undiscovered_stack_count];
-}*/
-
   /////////////////////
  // class utilities //
 /////////////////////

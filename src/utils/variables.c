@@ -6,6 +6,20 @@
 
 static var_s vars[MAX_VARS_IN_SCOPE] = { 0 };
 static uint16_t vars_count = 0;
+static uint8_t current_scope = 0;
+
+void scope_increment(void) {
+    assert(current_scope < 100);
+    current_scope++;
+}
+
+void scope_decrement(void) {
+    assert(current_scope > 0);
+    current_scope--;
+    while (vars_count > 0 && vars[vars_count - 1].scope > current_scope) {
+        vars_count--;
+    }
+}
 
 var_s* get_variable(char* name) {
     for (int i = vars_count - 1; i >= 0; i--) {
@@ -14,9 +28,10 @@ var_s* get_variable(char* name) {
     return NULL;
 }
 
-uint16_t store_variable(type_t type, char* name, uint8_t scope) {
+uint16_t store_variable(type_t type, char* name) {
     assert(vars_count < MAX_VARS_IN_SCOPE);
-    assert(get_variable(name) == NULL);
+    var_s* same_name = get_variable(name);
+    assert(same_name == NULL || same_name->scope < current_scope);
 
     // store type
     vars[vars_count].type = type;
@@ -26,7 +41,7 @@ uint16_t store_variable(type_t type, char* name, uint8_t scope) {
     strcpy(vars[vars_count].name, name);
 
     // store scope
-    vars[vars_count].scope = scope;
+    vars[vars_count].scope = current_scope;
 
     // calculate and store address
     uint16_t address = 0;

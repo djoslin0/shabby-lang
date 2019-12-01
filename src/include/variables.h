@@ -14,6 +14,8 @@ struct {
 } typedef var_s;
 
 var_s* get_variable(char*);
-uint16_t store_variable(type_t, char*, uint8_t);
+uint16_t store_variable(type_t, char*);
+void scope_increment(void);
+void scope_decrement(void);
 
 #endif

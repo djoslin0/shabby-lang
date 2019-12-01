@@ -10,8 +10,6 @@
 #include "types.h"
 #include "variables.h"
 
-#define SCHEDULE_RAW_BYTECODE ((uint16_t)-1)
-
   ///////////////////
  // file pointers //
 ///////////////////
@@ -26,6 +24,8 @@ static FILE *gen_ptr = NULL; // output
 
 static ast_s cur_node = { 0 };
 static ast_s peeked_node = { 0 };
+
+#define BIT_CLASS_END (1 << 15)
 
 #define SIZE_BC(x) (x + cur_node.value_type - 1)
 
@@ -46,33 +46,47 @@ static void read_token(void) {
  // scheduled future nodes //
 ////////////////////////////
 
-static uint16_t future_stack[FUTURE_STACK_SIZE] = { 0 };
+enum {
+    FUTURE_OFFSET,
+    FUTURE_RAW_BYTECODE,
+    FUTURE_CLASS_END,
+} typedef future_info_t;
+
+struct {
+    future_info_t type;
+    uint16_t data;
+} typedef future_info_s;
+
+static future_info_s future_stack[FUTURE_STACK_SIZE] = { 0 };
 static uint16_t future_stack_count = 0;
 
-/*static void future_stack_print(void) {
-    printf("    ");
-    for (int i = 0; i < future_stack_count; i++) {
-        printf("%d ", future_stack[i]);
-    }
-    printf("\n");
-}*/
-
-static void future_push(uint16_t offset) {
+static void future_push_offset(uint16_t offset) {
     if (offset == NULL) { return; }
-    future_stack[future_stack_count] = offset;
+    future_stack[future_stack_count].type = FUTURE_OFFSET;
+    future_stack[future_stack_count].data = offset;
     future_stack_count++;
     assert(future_stack_count < FUTURE_STACK_SIZE);
 }
 
 static void future_push_bytecode(bytecode_t bc) {
-    future_push(bc);
-    future_push(SCHEDULE_RAW_BYTECODE);
+    future_stack[future_stack_count].type = FUTURE_RAW_BYTECODE;
+    future_stack[future_stack_count].data = bc;
+    future_stack_count++;
+    assert(future_stack_count < FUTURE_STACK_SIZE);
 }
 
-static uint16_t future_pop(void) {
+static void future_push_class_end(uint16_t offset) {
+    if (offset == NULL) { return; }
+    future_stack[future_stack_count].type = FUTURE_CLASS_END;
+    future_stack[future_stack_count].data = offset;
+    future_stack_count++;
+    assert(future_stack_count < FUTURE_STACK_SIZE);
+}
+
+static future_info_s* future_pop(void) {
     assert(future_stack_count > 0);
     future_stack_count--;
-    return future_stack[future_stack_count];
+    return &future_stack[future_stack_count];
 }
 
   ////////////
@@ -133,7 +147,7 @@ static void gen_cast(void) {
     }
 
     // push the child node
-    future_push(peeked_node.offset);
+    future_push_offset(peeked_node.offset);
 }
 
 static void gen_constant(void) {
@@ -161,8 +175,8 @@ static void gen_unary_op(void) {
 static void gen_factor(void) {
     uint16_t unary_op = cur_node.children[0];
     uint16_t value = cur_node.children[1];
-    future_push(unary_op);
-    future_push(value);
+    future_push_offset(unary_op);
+    future_push_offset(value);
 }
 
 static void gen_term_op(void) {
@@ -178,9 +192,9 @@ static void gen_term(void) {
     uint16_t right_factor = cur_node.children[0];
     uint16_t term_op = cur_node.children[1];
     uint16_t left_factor = cur_node.children[2];
-    future_push(term_op);
-    future_push(left_factor);
-    future_push(right_factor);
+    future_push_offset(term_op);
+    future_push_offset(left_factor);
+    future_push_offset(right_factor);
 }
 
 static void gen_expression_op(void) {
@@ -196,9 +210,9 @@ static void gen_expression(void) {
     uint16_t right_term = cur_node.children[0];
     uint16_t expression_op = cur_node.children[1];
     uint16_t left_term = cur_node.children[2];
-    future_push(expression_op);
-    future_push(left_term);
-    future_push(right_term);
+    future_push_offset(expression_op);
+    future_push_offset(left_term);
+    future_push_offset(right_term);
 }
 
 static void gen_assignment(void) {
@@ -215,7 +229,7 @@ static void gen_assignment(void) {
 
     // schedule expression
     uint16_t expression = cur_node.children[0];
-    future_push(expression);
+    future_push_offset(expression);
 }
 
 static void gen_declaration(void) {
@@ -226,13 +240,16 @@ static void gen_declaration(void) {
 
     // variable identifier
     read_token();
-    var_s* var = get_variable(token);
-    assert(var == NULL);
-
-    uint16_t addr = store_variable(type, token, 0);
+    uint16_t addr = store_variable(type, token);
 
     // allocate space
-    output(SIZE_BC(BC_PUSH8), 0);
+    uint16_t bytes = ast_get_param(ast_ptr, cur_node.node_type, cur_node.offset, NTP_DECLARATION_BYTES);
+    switch (bytes) {
+        case 0: assert(FALSE);
+        case 1: output(BC_PUSH8, 0); break;
+        case 2: output(BC_PUSH16, 0); break;
+        default: output(BC_PUSH_ZEROS, bytes); break;
+    }
 
     // push pointer
     output(BC_PUSH16, addr);
@@ -242,14 +259,27 @@ static void gen_declaration(void) {
 
     // schedule expression
     uint16_t expression = cur_node.children[0];
-    future_push(expression);
+    future_push_offset(expression);
 }
 
 static void gen_statement(void) {
     uint16_t next_statement = cur_node.children[0];
     uint16_t this_statement = cur_node.children[1];
-    future_push(next_statement);
-    future_push(this_statement);
+    future_push_offset(next_statement);
+    future_push_offset(this_statement);
+}
+
+static void gen_class(void) {
+    scope_increment();
+    output(BC_IJUMP, (BIT_CLASS_END | cur_node.offset));
+    output(BC_LABEL, cur_node.offset);
+    future_push_class_end(cur_node.offset);
+    future_push_offset(cur_node.children[0]);
+}
+
+static void gen_class_end(uint16_t offset) {
+    scope_decrement();
+    output(BC_LABEL, (BIT_CLASS_END | offset));
 }
 
 void gen(FILE* src_ptr_arg, FILE* ast_ptr_arg, FILE* gen_ptr_arg) {
@@ -265,21 +295,22 @@ void gen(FILE* src_ptr_arg, FILE* ast_ptr_arg, FILE* gen_ptr_arg) {
     gen_ptr = gen_ptr_arg;
 
     // move to root node
-    future_push(fget16(ast_ptr));
+    future_push_offset(fget16(ast_ptr));
 
     int bail = 0;
     while(future_stack_count > 0 && ++bail < 1000) {
-        uint16_t offset = future_pop();
-        // check for raw bytecode output
-        if (offset == SCHEDULE_RAW_BYTECODE) {
-            output(future_pop());
-            continue;
+        future_info_s* cur_info = future_pop();
+        switch (cur_info->type) {
+            case FUTURE_CLASS_END: gen_class_end(cur_info->data); continue;
+            case FUTURE_RAW_BYTECODE: output(cur_info->data); continue;
+            case FUTURE_OFFSET: break;
         }
 
         // navigate to offset and parse node
-        ast_read_node(ast_ptr, offset, &cur_node);
+        ast_read_node(ast_ptr, cur_info->data, &cur_node);
         printf("                %s:\n", node_constants[cur_node.node_type].name);
         switch(cur_node.node_type) {
+            case NT_CLASS: gen_class(); break;
             case NT_STATEMENT: gen_statement(); break;
             case NT_DECLARATION: gen_declaration(); break;
             case NT_ASSIGNMENT: gen_assignment(); break;

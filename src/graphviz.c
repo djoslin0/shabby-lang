@@ -117,6 +117,7 @@ void graph(FILE *ast_ptr_arg, FILE *dot_ptr_arg) {
         // fill color with type
         switch (node.value_type) {
             case TYPE_NONE: fprintf(dot_ptr, ", fillcolor=\"white\""); break;
+            case TYPE_USER_DEFINED: fprintf(dot_ptr, ", fillcolor=\"#FFEEEE\""); break;
             case TYPE_BYTE: fprintf(dot_ptr, ", fillcolor=\"#EEFFEE\""); break;
             case TYPE_SHORT: fprintf(dot_ptr, ", fillcolor=\"#EEEEFF\""); break;
             default: printf("%d\n", node.value_type); assert(FALSE);
