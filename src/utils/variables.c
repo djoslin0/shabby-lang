@@ -28,7 +28,7 @@ var_s* get_variable(char* name) {
     return NULL;
 }
 
-uint16_t store_variable(type_t type, char* name) {
+uint16_t store_variable(type_t type, char* name, uint16_t size) {
     assert(vars_count < MAX_VARS_IN_SCOPE);
     var_s* same_name = get_variable(name);
     assert(same_name == NULL || same_name->scope < current_scope);
@@ -43,10 +43,13 @@ uint16_t store_variable(type_t type, char* name) {
     // store scope
     vars[vars_count].scope = current_scope;
 
+    // store size
+    vars[vars_count].size = size;
+
     // calculate and store address
     uint16_t address = 0;
-    if (vars_count > 0) {
-        address = vars[vars_count - 1].address + types[vars[vars_count - 1].type].size;
+    if (vars_count > 0 && vars[vars_count - 1].scope == current_scope) {
+        address = vars[vars_count - 1].address + vars[vars_count - 1].size;
     }
     vars[vars_count].address = address;
 
@@ -54,4 +57,7 @@ uint16_t store_variable(type_t type, char* name) {
     vars_count++;
 
     return address;
+
+    // make pedantic compilers happy
+    types[0] = types[0];
 }

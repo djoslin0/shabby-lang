@@ -350,7 +350,7 @@ static void tc_declaration(void) {
     }
 
     read_token();
-    store_variable(type, token);
+    store_variable(type, token, types[type].size);
 
     ast_write_type(type, cur_node.offset);
 }

@@ -1,5 +1,10 @@
-byte b = 1;
-class foo {
-    byte a = 2;
+byte a = 1;
+foo baz;
+class bar {
+    short b = 2;
 }
+class foo {
+    bar bbb;
+}
+
 byte c = 3;

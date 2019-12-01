@@ -12,65 +12,79 @@
 
 static FILE *bin_ptr = NULL; // binary bytecode
 
-  //////////////////////
- // evaluation stack //
-//////////////////////
+  /////////////////////
+ // execution stack //
+/////////////////////
 
-#define EVAL_STACK_SIZE 256
-static uint8_t eval_stack[EVAL_STACK_SIZE];
-static uint8_t eval_stack_count = 0;
+#define EXEC_STACK_SIZE 256
+static uint8_t exec_stack[EXEC_STACK_SIZE];
+static uint8_t exec_stack_count = 0;
+
+  //////////////
+ // pointers //
+///////////////
+
+uint16_t frame_ptr = 0;
+
+  ///////////////
+ // execution //
+///////////////
 
 // 8 bit
-static void eval_push8(uint8_t value) {
-    eval_stack[eval_stack_count] = value;
-    eval_stack_count++;
-    assert(eval_stack_count < EVAL_STACK_SIZE);
+static void exec_push8(uint8_t value) {
+    exec_stack[exec_stack_count] = value;
+    exec_stack_count++;
+    assert(exec_stack_count < EXEC_STACK_SIZE);
 }
 
-static uint8_t eval_pop8(void) {
-    assert(eval_stack_count > 0);
-    eval_stack_count--;
-    return eval_stack[eval_stack_count];
+static uint8_t exec_pop8(void) {
+    assert(exec_stack_count > 0);
+    exec_stack_count--;
+    return exec_stack[exec_stack_count];
 }
 
-static uint8_t eval_get8(uint16_t index) {
-    assert(index >= 0 && index < eval_stack_count);
-    return eval_stack[index];
+static uint8_t exec_get8(uint16_t index) {
+    uint16_t offset = (frame_ptr + index);
+    assert(offset >= 0 && offset < exec_stack_count);
+    return exec_stack[offset];
 }
 
-static void eval_set8(uint16_t index, uint8_t value) {
-    assert(index >= 0 && index < eval_stack_count);
-    eval_stack[index] = value;
+static void exec_set8(uint16_t index, uint8_t value) {
+    uint16_t offset = (frame_ptr + index);
+    assert(offset >= 0 && offset < exec_stack_count);
+    exec_stack[offset] = value;
 }
 
 // 16 bit
-static void eval_push16(uint16_t value) {
-    *(uint16_t*)(&eval_stack[eval_stack_count]) = value;
-    eval_stack_count += 2;
-    assert(eval_stack_count < EVAL_STACK_SIZE);
+static void exec_push16(uint16_t value) {
+    *(uint16_t*)(&exec_stack[exec_stack_count]) = value;
+    exec_stack_count += 2;
+    assert(exec_stack_count < EXEC_STACK_SIZE);
 }
 
-static uint16_t eval_pop16(void) {
-    assert(eval_stack_count > 0);
-    eval_stack_count -= 2;
-    return *(uint16_t*)(&eval_stack[eval_stack_count]);
+static uint16_t exec_pop16(void) {
+    assert(exec_stack_count > 0);
+    exec_stack_count -= 2;
+    return *(uint16_t*)(&exec_stack[exec_stack_count]);
 }
 
-static uint16_t eval_get16(uint16_t index) {
-    assert(index >= 0 && index < eval_stack_count - 1);
-    return *(uint16_t*)(&eval_stack[index]);
+static uint16_t exec_get16(uint16_t index) {
+    uint16_t offset = (frame_ptr + index);
+    assert(offset >= 0 && offset < exec_stack_count);
+    return *(uint16_t*)(&exec_stack[offset]);
 }
 
-static void eval_set16(uint16_t index, uint16_t value) {
-    assert(index >= 0 && index < eval_stack_count - 1);
-    *(uint16_t*)(&eval_stack[index]) = value;
+static void exec_set16(uint16_t index, uint16_t value) {
+    uint16_t offset = (frame_ptr + index);
+    assert(offset >= 0 && offset < exec_stack_count);
+    *(uint16_t*)(&exec_stack[offset]) = value;
 }
 
 #ifdef DEBUG
-    static void output_eval_stack(void) {
+    static void output_exec_stack(void) {
         printf("\t  >>  ");
-        for (int i = 0; i < eval_stack_count; i++) {
-            printf("%d ", (int8_t)eval_stack[i]);
+        for (int i = 0; i < exec_stack_count; i++) {
+            printf("%d ", (int8_t)exec_stack[i]);
         }
         printf("\n");
     }
@@ -81,42 +95,76 @@ static void eval_set16(uint16_t index, uint16_t value) {
 //////////////////
 
 // misc
-static void vm_extend(void) { ((int8_t)eval_get8(eval_stack_count - 1)) >= 0 ? eval_push8(0) : eval_push8((uint8_t)-1); }
+static void vm_extend(void) {
+    assert(exec_stack_count > 0);
+    exec_stack[exec_stack_count - 1] >= 0
+        ? exec_push8(0)
+        : exec_push8((uint8_t)-1);
+}
 
 // jumps
-static void vm_jump(void) { fseek(bin_ptr, eval_pop16(), 0); }
+static void vm_jump(void) { fseek(bin_ptr, exec_pop16(), 0); }
 static void vm_ijump(void) { fseek(bin_ptr, fget16(bin_ptr), 0); }
 
+// functions
+
+static void vm_call(void) {
+    // push PC + parameters
+    exec_push16(ftell(bin_ptr) + bytecode[BC_CALL].params * bytecode[BC_CALL].param_size);
+    // push FP difference
+    uint16_t fp_change = fget16(bin_ptr);
+    exec_push16(fp_change);
+    // increment FP
+    frame_ptr += fp_change;
+    // set PC
+    fseek(bin_ptr, fget16(bin_ptr), 0);
+}
+
+static void vm_ret(void) {
+    // decrement FP
+    frame_ptr -= exec_pop16();
+    // pop PC
+    fseek(bin_ptr, exec_pop16(), 0);
+}
+
+// program counter
+static void vm_push_pc(void) { exec_push16(ftell(bin_ptr)); }
+static void vm_pop_pc(void) { fseek(bin_ptr, exec_pop16(), 0); }
+
+// frame pointer
+static void vm_push_fp(void) { exec_push16(frame_ptr); }
+static void vm_pop_fp(void) { frame_ptr = exec_pop16(); }
+
 // stack basics
-static void vm_push_zeros(void) { uint16_t zeros = fget16(bin_ptr); while (zeros-- > 0) { eval_push8(0); } }
+static void vm_push_zeros(void) { uint16_t zeros = fget16(bin_ptr); while (zeros-- > 0) { exec_push8(0); } }
 
-static void vm_push8(void) { eval_push8(fgetc(bin_ptr)); }
-static void vm_pop8(void) { eval_pop8(); }
+static void vm_push8(void) { exec_push8(fgetc(bin_ptr)); }
+static void vm_pop8(void) { exec_pop8(); }
 
-static void vm_push16(void) { eval_push16(fget16(bin_ptr)); }
-static void vm_pop16(void) { eval_pop16(); }
+static void vm_push16(void) { exec_push16(fget16(bin_ptr)); }
+static void vm_pop16(void) { exec_pop16(); }
 
 // pointers
-static void vm_iget8(void) { eval_push8(eval_get8(fget16(bin_ptr))); }
-static void vm_get8(void) { eval_push8(eval_get8(eval_pop16())); }
-static void vm_set8(void) { eval_set8(eval_pop16(), eval_pop8()); }
+static void vm_iget8(void) { exec_push8(exec_get8(fget16(bin_ptr))); }
+static void vm_get8(void) { exec_push8(exec_get8(exec_pop16())); }
+static void vm_set8(void) { exec_set8(exec_pop16(), exec_pop8()); }
 
-static void vm_iget16(void) { eval_push16(eval_get16(fget16(bin_ptr))); }
-static void vm_get16(void) { eval_push16(eval_get16(eval_pop16())); }
-static void vm_set16(void) { eval_set16(eval_pop16(), eval_pop16()); }
+static void vm_iget16(void) { exec_push16(exec_get16(fget16(bin_ptr))); }
+static void vm_get16(void) { exec_push16(exec_get16(exec_pop16())); }
+static void vm_set16(void) { exec_set16(exec_pop16(), exec_pop16()); }
 
 // math
-static void vm_neg8(void) { eval_push8(-eval_pop8()); }
-static void vm_add8(void) { eval_push8(eval_pop8() + eval_pop8()); }
-static void vm_sub8(void) { eval_push8(eval_pop8() - eval_pop8()); }
-static void vm_mul8(void) { eval_push8(eval_pop8() * eval_pop8()); }
-static void vm_div8(void) { eval_push8(eval_pop8() / eval_pop8()); }
+static void vm_neg8(void) { exec_push8(-exec_pop8()); }
+static void vm_add8(void) { exec_push8(exec_pop8() + exec_pop8()); }
+static void vm_sub8(void) { exec_push8(exec_pop8() - exec_pop8()); }
+static void vm_mul8(void) { exec_push8(exec_pop8() * exec_pop8()); }
+static void vm_div8(void) { exec_push8(exec_pop8() / exec_pop8()); }
 
-static void vm_neg16(void) { eval_push16(-eval_pop16()); }
-static void vm_add16(void) { eval_push16(eval_pop16() + eval_pop16()); }
-static void vm_sub16(void) { eval_push16(eval_pop16() - eval_pop16()); }
-static void vm_mul16(void) { eval_push16(eval_pop16() * eval_pop16()); }
-static void vm_div16(void) { eval_push16(eval_pop16() / eval_pop16()); }
+static void vm_neg16(void) { exec_push16(-exec_pop16()); }
+static void vm_add16(void) { exec_push16(exec_pop16() + exec_pop16()); }
+static void vm_sub16(void) { exec_push16(exec_pop16() - exec_pop16()); }
+static void vm_mul16(void) { exec_push16(exec_pop16() * exec_pop16()); }
+static void vm_div16(void) { exec_push16(exec_pop16() / exec_pop16()); }
 
 void vm(FILE* bin_ptr_arg) {
     bin_ptr = bin_ptr_arg;
@@ -132,6 +180,11 @@ void vm(FILE* bin_ptr_arg) {
         bytecode_t type = fgetc(bin_ptr);
         if (type == (bytecode_t)EOF) { break; }
 
+        #ifdef DEBUG
+            printf("%04X  ", (uint16_t)ftell(bin_ptr));
+            printf("%s ", bytecode[type].name);
+        #endif
+
         switch (type) {
             // misc
             case BC_NOOP: break;
@@ -140,6 +193,18 @@ void vm(FILE* bin_ptr_arg) {
             // jumps
             case BC_JUMP: vm_jump(); break;
             case BC_IJUMP: vm_ijump(); break;
+
+            // functions
+            case BC_CALL: vm_call(); break;
+            case BC_RET: vm_ret(); break;
+
+            // program counter
+            case BC_PUSH_PC: vm_push_pc(); break;
+            case BC_POP_PC: vm_pop_pc(); break;
+
+            // frame pointer
+            case BC_PUSH_FP: vm_push_fp(); break;
+            case BC_POP_FP: vm_pop_fp(); break;
 
             // stack basics
             case BC_PUSH_ZEROS: vm_push_zeros(); break;
@@ -179,8 +244,7 @@ void vm(FILE* bin_ptr_arg) {
             case BC_LABEL: assert(FALSE);
         }
         #ifdef DEBUG
-            printf("%s", bytecode[type].name);
-            output_eval_stack();
+            output_exec_stack();
         #else
             // make pedantic compilers happy
             bytecode[type] = bytecode[type];

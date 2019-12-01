@@ -21,6 +21,18 @@ enum {
     BC_IJUMP,
     BC_LABEL,
 
+    // functions
+    BC_CALL,
+    BC_RET,
+
+    // program counter
+    BC_PUSH_PC,
+    BC_POP_PC,
+
+    // frame pointer
+    BC_PUSH_FP,
+    BC_POP_FP,
+
     // stack basics
     BC_PUSH_ZEROS,
 
@@ -69,6 +81,18 @@ static bytecode_s bytecode[] = {
     [BC_JUMP] = { 0, 0, DBG_STR("jump") },
     [BC_IJUMP] = { 1, 2, DBG_STR("ijump") },
     [BC_LABEL] = { 1, 2, DBG_STR("label") },
+
+    // functions
+    [BC_CALL] = { 2, 2, DBG_STR("call") },
+    [BC_RET] = { 0, 0, DBG_STR("ret") },
+
+    // program counter
+    [BC_PUSH_PC] = { 0, 0, DBG_STR("push_pc") },
+    [BC_POP_PC] = { 0, 0, DBG_STR("pop_pc") },
+
+    // frame pointer
+    [BC_PUSH_FP] = { 0, 0, DBG_STR("push_fp") },
+    [BC_POP_FP] = { 0, 0, DBG_STR("pop_fp") },
 
     // stack basics
     [BC_PUSH_ZEROS] = { 1, 2, DBG_STR("push_zeros") },

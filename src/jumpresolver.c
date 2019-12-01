@@ -85,8 +85,11 @@ void jump_resolution(FILE* gen_ptr_arg, FILE* bin_ptr_arg) {
         // exit at EOF
         if (type == (bytecode_t)EOF) { break; }
 
-        // remember labels
-        if (type == BC_IJUMP) {
+        // save labels
+         if (type == BC_CALL) {
+            fget16(bin_ptr);
+         }
+        if (type == BC_IJUMP || type == BC_CALL) {
             uint16_t ijump_param = ftell(bin_ptr);
             label_s* label = label_get(fget16(bin_ptr));
             assert(label != NULL);

@@ -42,6 +42,75 @@ static void read_token(void) {
     fseek(ast_ptr, last_position + strlen(token) + 1, 0);
 }
 
+// TODO: remove me or consolidate with symgen
+static char peeked_token[MAX_TOKEN_LEN];
+static void peek_token(void) {
+    int last_position = ftell(ast_ptr);
+    memset(peeked_token, NULL, MAX_TOKEN_LEN);
+    fgets(peeked_token, MAX_TOKEN_LEN, ast_ptr);
+    assert(strlen(peeked_token) < MAX_TOKEN_LEN);
+    fseek(ast_ptr, last_position + strlen(peeked_token) + 1, 0);
+}
+
+  /////////////////////
+ // class utilities //
+/////////////////////
+
+// TODO: remove me or consolidate with symgen
+static uint16_t get_user_type(uint16_t offset) {
+    uint16_t return_pos = ftell(ast_ptr);
+
+    // read current
+    ast_read_node(ast_ptr, offset, &peeked_node);
+    uint16_t highest_offset = peeked_node.parent_offset;
+
+    // search up
+    while (offset != NULL) {
+        // read current
+        ast_read_node(ast_ptr, offset, &peeked_node);
+        uint16_t next_offset = highest_offset;
+        if (peeked_node.offset == highest_offset) {
+            highest_offset = peeked_node.parent_offset;
+        }
+
+        // look only at statement
+        if (peeked_node.node_type != NT_STATEMENT) { goto next_up; }
+
+        // explore down before going up
+        if (peeked_node.children[0] != NULL) { next_offset = peeked_node.children[0]; }
+
+        // look only at statements child
+        ast_read_node(ast_ptr, peeked_node.children[1], &peeked_node);
+        if (peeked_node.node_type != NT_CLASS) { goto next_up; }
+
+        // look only at matching tokens
+        peek_token();
+        if (strcmp(token, peeked_token)) { goto next_up; }
+
+        fseek(ast_ptr, return_pos, 0);
+        return peeked_node.offset;
+
+next_up:
+        // schedule parent
+        offset = next_offset;
+    }
+
+    assert(FALSE);
+}
+
+static bool is_class_member(uint16_t offset) {
+    // search up
+    while (offset != NULL) {
+        // read current
+        ast_read_node(ast_ptr, offset, &peeked_node);
+        if (peeked_node.node_type == NT_CLASS) { return TRUE; }
+        assert(peeked_node.node_type == NT_STATEMENT);
+        offset = peeked_node.parent_offset;
+    }
+
+    return FALSE;
+}
+
   ////////////////////////////
  // scheduled future nodes //
 ////////////////////////////
@@ -236,25 +305,44 @@ static void gen_declaration(void) {
     // variable type
     read_token();
     type_t type = get_type(token);
+
+    // resolve user type
+    uint16_t user_type_offset = NULL;
+    if (type == TYPE_NONE) {
+        user_type_offset = get_user_type(cur_node.offset);
+        type = TYPE_USER_DEFINED;
+    }
     assert(type != TYPE_NONE);
 
-    // variable identifier
-    read_token();
-    uint16_t addr = store_variable(type, token);
-
-    // allocate space
+    // discover byte size
     uint16_t bytes = ast_get_param(ast_ptr, cur_node.node_type, cur_node.offset, NTP_DECLARATION_BYTES);
-    switch (bytes) {
-        case 0: assert(FALSE);
-        case 1: output(BC_PUSH8, 0); break;
-        case 2: output(BC_PUSH16, 0); break;
-        default: output(BC_PUSH_ZEROS, bytes); break;
+
+    // remember variable
+    read_token();
+    uint16_t addr = store_variable(type, token, bytes);
+
+    // allocate bytes
+    if (!is_class_member(cur_node.parent_offset)) {
+        switch (bytes) {
+            case 0: assert(FALSE);
+            case 1: output(BC_PUSH8, 0); break;
+            case 2: output(BC_PUSH16, 0); break;
+            default: output(BC_PUSH_ZEROS, bytes); break;
+        }
+    }
+
+    // call into class
+    if (type == TYPE_USER_DEFINED) {
+        output(BC_CALL, addr, user_type_offset);
+        assert(cur_node.children[0] == NULL);
+        return;
     }
 
     // push pointer
     output(BC_PUSH16, addr);
 
     // schedule set
+    assert(bytes > 0 && bytes <= 2);
     future_push_bytecode(SIZE_BC(BC_SET8));
 
     // schedule expression
@@ -279,6 +367,7 @@ static void gen_class(void) {
 
 static void gen_class_end(uint16_t offset) {
     scope_decrement();
+    output(BC_RET);
     output(BC_LABEL, (BIT_CLASS_END | offset));
 }
 
