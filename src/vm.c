@@ -153,6 +153,13 @@ static void vm_iget16(void) { exec_push16(exec_get16(fget16(bin_ptr))); }
 static void vm_get16(void) { exec_push16(exec_get16(exec_pop16())); }
 static void vm_set16(void) { exec_set16(exec_pop16(), exec_pop16()); }
 
+static void vm_copy(void) {
+    uint16_t from = frame_ptr + exec_pop16();
+    uint16_t to = frame_ptr + exec_pop16();
+    uint16_t size = exec_pop16();
+    memcpy(&exec_stack[to], &exec_stack[from], size);
+}
+
 // math
 static void vm_neg8(void) { exec_push8(-exec_pop8()); }
 static void vm_add8(void) { exec_push8(exec_pop8() + exec_pop8()); }
@@ -223,6 +230,8 @@ void vm(FILE* bin_ptr_arg) {
             case BC_GET16: vm_get16(); break;
             case BC_IGET16: vm_iget16(); break;
             case BC_SET16: vm_set16(); break;
+
+            case BC_COPY: vm_copy(); break;
 
             // math
             case BC_NEG8: vm_neg8(); break;

@@ -52,6 +52,8 @@ typedef enum {
     BC_IGET8,
     BC_IGET16,
 
+    BC_COPY,
+
     // math
     BC_NEG8,
     BC_NEG16,
@@ -112,6 +114,8 @@ static bytecode_s bytecode[] = {
 
     [BC_IGET8] = { 1, 2, DBG_STR("iget8") },
     [BC_IGET16] = { 1, 2, DBG_STR("iget16") },
+
+    [BC_COPY] = { 0, 0, DBG_STR("copy") },
 
     // math
     [BC_NEG8] = { 0, 0, DBG_STR("neg8") },

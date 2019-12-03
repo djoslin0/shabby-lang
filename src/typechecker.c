@@ -348,6 +348,44 @@ static void tc_variable(void) {
 
     type_t type = tc_member_address_and_type(var, cur_node.children[0]);
     assert(type != TYPE_NONE);
+
+    // make sure we only assign to a matching user type
+    if (type == TYPE_USER_DEFINED) {
+        // get user type name
+        ast_read_node(ast_ptr, var->offset, &peeked_node);
+        char peeked_token[MAX_TOKEN_LEN+1];
+        ast_peek_token(ast_ptr, peeked_token);
+
+        // get user type offset
+        uint16_t user_type_offset = get_user_type(ast_ptr, peeked_token, cur_node.offset);
+        assert(user_type_offset != NULL);
+
+        bool found = FALSE;
+        uint16_t next_offset = cur_node.parent_offset;
+        while (next_offset != NULL) {
+            ast_read_node(ast_ptr, next_offset, &peeked_node);
+            next_offset = peeked_node.parent_offset;
+            if (peeked_node.node_type == NT_STATEMENT) { break; }
+            if (peeked_node.node_type == NT_ASSIGNMENT) {
+                // get assignment's var
+                ast_peek_token(ast_ptr, peeked_token);
+                var_s* var2 = get_variable(peeked_token);
+                assert(var2 != NULL);
+
+                // get assignment's user type name
+                ast_read_node(ast_ptr, var2->offset, &peeked_node);
+                ast_peek_token(ast_ptr, peeked_token);
+
+                // get assignment's user type offset
+                uint16_t user_type_offset2 = get_user_type(ast_ptr, peeked_token, var2->offset);
+                assert(user_type_offset == user_type_offset2);
+                found = TRUE;
+                break;
+            }
+        }
+        assert(found || !found);
+    }
+
     tc_propagate(type);
 }
 

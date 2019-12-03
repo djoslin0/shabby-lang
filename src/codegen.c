@@ -181,9 +181,13 @@ static void gen_variable(void) {
     assert(var != NULL);
 
     // get address offset
-    uint16_t address = ast_get_param(ast_ptr, NT_VARIABLE, cur_node.offset, NTP_VARIABLE_ADDRESS);
+    uint16_t address = var->address + ast_get_param(ast_ptr, NT_VARIABLE, cur_node.offset, NTP_VARIABLE_ADDRESS);
 
-    output(SIZE_BC(BC_IGET8), var->address + address);
+    if (cur_node.value_type == TYPE_USER_DEFINED) {
+        output(BC_PUSH16, address);
+    } else {
+        output(SIZE_BC(BC_IGET8), address);
+    }
 }
 
 static void gen_unary_op(void) {
@@ -244,13 +248,25 @@ static void gen_assignment(void) {
     assert(var != NULL);
 
     // get address offset
-    uint16_t address = ast_get_param(ast_ptr, NT_ASSIGNMENT, cur_node.offset, NTP_ASSIGNMENT_ADDRESS);
+    uint16_t address = var->address + ast_get_param(ast_ptr, NT_ASSIGNMENT, cur_node.offset, NTP_ASSIGNMENT_ADDRESS);
 
-    // push pointer
-    output(BC_PUSH16, var->address + address);
-
-    // schedule set
-    future_push_bytecode(SIZE_BC(BC_SET8));
+    // user types are handled differently: copy instead of set
+    if (cur_node.value_type == TYPE_USER_DEFINED) {
+        // read the variable node's type
+        ast_read_node(ast_ptr, var->offset, &peeked_node);
+        char peeked_token[MAX_TOKEN_LEN+1];
+        ast_peek_token(ast_ptr, peeked_token);
+        // get the user type's size
+        uint16_t user_type_offset = get_user_type(ast_ptr, peeked_token, cur_node.offset);
+        uint16_t user_type_size = ast_get_param(ast_ptr, NT_CLASS, user_type_offset, NTP_CLASS_BYTES);
+        output(BC_PUSH16, user_type_size);
+        output(BC_PUSH16, address);
+        future_push_bytecode(BC_COPY);
+    } else {
+        output(BC_PUSH16, address);
+        // schedule set
+        future_push_bytecode(SIZE_BC(BC_SET8));
+    }
 
     // schedule expression
     uint16_t expression = cur_node.children[0];

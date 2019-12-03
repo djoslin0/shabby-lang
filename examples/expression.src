@@ -1,19 +1,11 @@
-class baz {
-    short aa = 2;
-    short bb = 3;
-}
+byte aaa = 10;
 class foo {
-    byte a = 1;
-    baz blah;
-    byte b = 4;
-    class hello {
-        byte w = 5;
-    }
-    hello help;
+    byte a;
+    byte b;
+    byte c;
 }
-foo bleh;
-bleh.help.w = bleh.help.w * 10;
-bleh.b = bleh.b * 10;
-bleh.blah.bb = bleh.blah.bb * 10;
-bleh.blah.aa = bleh.blah.bb - 1;
-bleh.a = bleh.a * 10;
+foo bar;
+foo baz;
+bar.a = 1;
+bar.b = 2;
+baz = bar;
