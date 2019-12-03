@@ -13,10 +13,11 @@ typedef struct {
     uint8_t address;
     uint16_t size;
     uint16_t offset;
+    uint16_t user_type_offset;
 } var_s;
 
 var_s* get_variable(char*);
-uint16_t store_variable(type_t, char*, uint16_t, uint16_t);
+uint16_t store_variable(type_t, char*, uint16_t, uint16_t, uint16_t);
 void scope_increment(void);
 void scope_decrement(void);
 

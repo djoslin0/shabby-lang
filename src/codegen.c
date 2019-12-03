@@ -252,13 +252,7 @@ static void gen_assignment(void) {
 
     // user types are handled differently: copy instead of set
     if (cur_node.value_type == TYPE_USER_DEFINED) {
-        // read the variable node's type
-        ast_read_node(ast_ptr, var->offset, &peeked_node);
-        char peeked_token[MAX_TOKEN_LEN+1];
-        ast_peek_token(ast_ptr, peeked_token);
-        // get the user type's size
-        uint16_t user_type_offset = get_user_type(ast_ptr, peeked_token, cur_node.offset);
-        uint16_t user_type_size = ast_get_param(ast_ptr, NT_CLASS, user_type_offset, NTP_CLASS_BYTES);
+        uint16_t user_type_size = ast_get_param(ast_ptr, NT_CLASS, var->user_type_offset, NTP_CLASS_BYTES);
         output(BC_PUSH16, user_type_size);
         output(BC_PUSH16, address);
         future_push_bytecode(BC_COPY);
@@ -292,7 +286,7 @@ static void gen_declaration(void) {
 
     // remember variable
     read_token();
-    uint16_t addr = store_variable(type, token, bytes, cur_node.offset);
+    uint16_t addr = store_variable(type, token, bytes, cur_node.offset, user_type_offset);
 
     // allocate bytes
     if (!is_class_member(cur_node.parent_offset)) {

@@ -351,14 +351,7 @@ static void tc_variable(void) {
 
     // make sure we only assign to a matching user type
     if (type == TYPE_USER_DEFINED) {
-        // get user type name
-        ast_read_node(ast_ptr, var->offset, &peeked_node);
-        char peeked_token[MAX_TOKEN_LEN+1];
-        ast_peek_token(ast_ptr, peeked_token);
-
-        // get user type offset
-        uint16_t user_type_offset = get_user_type(ast_ptr, peeked_token, cur_node.offset);
-        assert(user_type_offset != NULL);
+        assert(var->user_type_offset != NULL);
 
         bool found = FALSE;
         uint16_t next_offset = cur_node.parent_offset;
@@ -368,22 +361,16 @@ static void tc_variable(void) {
             if (peeked_node.node_type == NT_STATEMENT) { break; }
             if (peeked_node.node_type == NT_ASSIGNMENT) {
                 // get assignment's var
+                char peeked_token[MAX_TOKEN_LEN+1];
                 ast_peek_token(ast_ptr, peeked_token);
                 var_s* var2 = get_variable(peeked_token);
                 assert(var2 != NULL);
-
-                // get assignment's user type name
-                ast_read_node(ast_ptr, var2->offset, &peeked_node);
-                ast_peek_token(ast_ptr, peeked_token);
-
-                // get assignment's user type offset
-                uint16_t user_type_offset2 = get_user_type(ast_ptr, peeked_token, var2->offset);
-                assert(user_type_offset == user_type_offset2);
+                assert(var->user_type_offset == var2->user_type_offset);
                 found = TRUE;
                 break;
             }
         }
-        assert(found || !found);
+        assert(found);
     }
 
     tc_propagate(type);
@@ -458,12 +445,16 @@ static void tc_assignment(void) {
 static void tc_declaration(void) {
     read_token();
     type_t type = get_type(token);
+    uint16_t user_type_offset = 0;
     if (type == TYPE_NONE) {
         type = TYPE_USER_DEFINED;
+        uint16_t return_to = ftell(ast_ptr);
+        user_type_offset = get_user_type(ast_ptr, token, cur_node.offset);
+        fseek(ast_ptr, return_to, 0);
     }
 
     read_token();
-    store_variable(type, token, types[type].size, cur_node.offset);
+    store_variable(type, token, types[type].size, cur_node.offset, user_type_offset);
 
     ast_write_type(type, cur_node.offset);
 }
