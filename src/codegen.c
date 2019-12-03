@@ -398,15 +398,15 @@ int main(int argc, char *argv[]) {
     assert(argc == 2);
 
     char src_buffer[128] = { 0 };
-    sprintf(src_buffer, "../examples/%s.src", argv[1]);
+    sprintf(src_buffer, "%s", argv[1]);
     src_ptr = fopen(src_buffer, "rb");
 
     char ast_buffer[128] = { 0 };
-    sprintf(ast_buffer, "../bin/%s.ast", argv[1]);
+    sprintf(ast_buffer, "../bin/compilation/%s.ast", "out");
     ast_ptr = fopen(ast_buffer, "rb");
 
     char gen_buffer[128] = { 0 };
-    sprintf(gen_buffer, "../bin/%s.gen", argv[1]);
+    sprintf(gen_buffer, "../bin/compilation/%s.gen", "out");
     gen_ptr = fopen(gen_buffer, "wb+");
 
     gen(src_ptr, ast_ptr, gen_ptr);
@@ -415,11 +415,11 @@ int main(int argc, char *argv[]) {
     fclose(ast_ptr);
     fclose(gen_ptr);
 
+    return 0;
+
     #ifdef DEBUG
     // make pedantic compilers happy
     node_constants[0] = node_constants[0];
     types[0] = types[0];
     #endif
-
-    return 0;
 }

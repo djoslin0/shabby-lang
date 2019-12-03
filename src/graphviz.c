@@ -153,22 +153,23 @@ int main(int argc, char *argv[]) {
     assert(argc == 2);
 
     char ast_buffer[128] = { 0 };
-    sprintf(ast_buffer, "../bin/%s.ast", argv[1]);
+    sprintf(ast_buffer, "../bin/compilation/%s.ast", "out");
     ast_ptr = fopen(ast_buffer, "rb");
 
     char dot_buffer[128] = { 0 };
-    sprintf(dot_buffer, "../bin/%s.dot", argv[1]);
+    sprintf(dot_buffer, "../bin/compilation/%s.dot", "out");
     dot_ptr = fopen(dot_buffer, "w+");
 
     graph(ast_ptr, dot_ptr);
-    printf("Created graph: ../bin/%s.png\n", argv[1]);
+    printf("Created graph: ../bin/compilation/%s.png\n", "out");
     fclose(dot_ptr);
     fclose(ast_ptr);
 
+    return 0;
+
     // make pedantic compilers happy
     types[0] = types[0];
-
-    return 0;
+    argv[0] = argv[0];
 }
 #else
 int main(int argc, char *argv[]) {

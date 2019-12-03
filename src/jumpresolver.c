@@ -113,11 +113,11 @@ int main(int argc, char *argv[]) {
     assert(argc == 2);
 
     char gen_buffer[128] = { 0 };
-    sprintf(gen_buffer, "../bin/%s.gen", argv[1]);
+    sprintf(gen_buffer, "../bin/compilation/%s.gen", "out");
     gen_ptr = fopen(gen_buffer, "rb");
 
     char bin_buffer[128] = { 0 };
-    sprintf(bin_buffer, "../bin/%s.bin", argv[1]);
+    sprintf(bin_buffer, "../bin/compilation/%s.bin", "out");
     bin_ptr = fopen(bin_buffer, "wb+");
 
     jump_resolution(gen_ptr, bin_ptr);
@@ -126,4 +126,7 @@ int main(int argc, char *argv[]) {
     fclose(bin_ptr);
 
     return 0;
+
+    // make pedantic compilers happy
+    argv[0] = argv[0];
 }

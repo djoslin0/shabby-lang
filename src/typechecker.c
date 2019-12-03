@@ -573,15 +573,16 @@ int main(int argc, char *argv[]) {
     assert(argc == 2);
 
     char ast_buffer[128] = { 0 };
-    sprintf(ast_buffer, "../bin/%s.ast", argv[1]);
+    sprintf(ast_buffer, "../bin/compilation/%s.ast", "out");
     ast_ptr = fopen(ast_buffer, "r+b");
 
     typecheck(ast_ptr);
 
+    fclose(ast_ptr);
+    return 0;
+
     // make pedantic compilers happy
     node_constants[0] = node_constants[0];
     types[0] = types[0];
-
-    fclose(ast_ptr);
-    return 0;
+    argv[0] = argv[0];
 }

@@ -269,11 +269,14 @@ int main(int argc, char *argv[]) {
     assert(argc == 2);
 
     char bin_buffer[128] = { 0 };
-    sprintf(bin_buffer, "../bin/%s.bin", argv[1]);
+    sprintf(bin_buffer, "../bin/compilation/%s.bin", "out");
     bin_ptr = fopen(bin_buffer, "rb");
 
     vm(bin_ptr);
 
     fclose(bin_ptr);
     return 0;
+
+    // make pedantic compilers happy
+    argv[0] = argv[0];
 }

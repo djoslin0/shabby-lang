@@ -124,11 +124,11 @@ int main(int argc, char *argv[]) {
     assert(argc == 2);
 
     char src_buffer[128] = { 0 };
-    sprintf(src_buffer, "../examples/%s.src", argv[1]);
+    sprintf(src_buffer, "%s", argv[1]);
     src_ptr = fopen(src_buffer, "rb");
 
     char tok_buffer[128] = { 0 };
-    sprintf(tok_buffer, "../bin/%s.tok", argv[1]);
+    sprintf(tok_buffer, "../bin/compilation/%s.tok", "out");
     tok_ptr = fopen(tok_buffer, "wb+");
 
     tokenize(src_ptr);
