@@ -21,10 +21,10 @@ static FILE *ast_ptr = NULL; // ast input/output
 static ast_s cur_node = { 0 };
 static ast_s peeked_node = { 0 };
 
-struct {
+typedef struct {
     uint8_t constant_count;
     int32_t constant_value;
-} typedef const_expr_t;
+} const_expr_t;
 
 #define MAX_SCRATCH 64
 static const_expr_t scratch[MAX_SCRATCH] = { 0 };

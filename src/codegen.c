@@ -65,16 +65,16 @@ static bool is_class_member(uint16_t offset) {
  // scheduled future nodes //
 ////////////////////////////
 
-enum {
+typedef enum {
     FUTURE_OFFSET,
     FUTURE_RAW_BYTECODE,
     FUTURE_CLASS_END,
-} typedef future_info_t;
+} future_info_t;
 
-struct {
+typedef struct {
     future_info_t type;
     uint16_t data;
-} typedef future_info_s;
+} future_info_s;
 
 static future_info_s future_stack[FUTURE_STACK_SIZE] = { 0 };
 static uint16_t future_stack_count = 0;

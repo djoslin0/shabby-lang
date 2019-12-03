@@ -3,15 +3,15 @@
 
 #include "constants.h"
 
-struct {
+typedef struct {
     uint8_t params;
     uint8_t param_size;
     #ifdef DEBUG
     char name[MAX_TOKEN_LEN+1];
     #endif
-} typedef bytecode_s;
+} bytecode_s;
 
-enum {
+typedef enum {
     // misc
     BC_NOOP = 0,
     BC_EXTEND,
@@ -70,7 +70,7 @@ enum {
 
     // misc
     BC_EOF = EOF,
-} typedef bytecode_t;
+} bytecode_t;
 
 static bytecode_s bytecode[] = {
     // misc

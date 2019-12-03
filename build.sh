@@ -10,28 +10,28 @@ set -e
 echo "#############"
 echo "# Tokenizer #"
 echo "#############"
-gcc tokenizer.c utils/symbols.c utils/file.c -I include -o "../bin/tokenizer" -Wall -Werror -Wpedantic
+gcc tokenizer.c utils/symbols.c utils/file.c -I include -o "../bin/tokenizer" -Wall -Wextra -Werror -Wpedantic
 ../bin/tokenizer $1
 
 echo ""
 echo "##########"
 echo "# Parser #"
 echo "##########"
-gcc parser.c utils/symbols.c utils/file.c utils/nodes.c -I include -o "../bin/parser" -Wall -Werror -Wpedantic
+gcc parser.c utils/symbols.c utils/file.c utils/nodes.c -I include -o "../bin/parser" -Wall -Wextra -Werror -Wpedantic
 ../bin/parser $1
 
 echo ""
 echo "##########"
 echo "# Symgen #"
 echo "##########"
-gcc symgen.c utils/symbols.c utils/file.c utils/nodes.c utils/types.c utils/variables.c -I include -o "../bin/symgen" -Wall -Werror -Wpedantic
+gcc symgen.c utils/symbols.c utils/file.c utils/nodes.c utils/types.c utils/variables.c -I include -o "../bin/symgen" -Wall -Wextra -Werror -Wpedantic
 ../bin/symgen $1
 
 echo ""
 echo "###############"
 echo "# Typechecker #"
 echo "###############"
-gcc typechecker.c utils/symbols.c utils/file.c utils/nodes.c utils/types.c utils/variables.c -I include -o "../bin/typec" -Wall -Werror -Wpedantic
+gcc typechecker.c utils/symbols.c utils/file.c utils/nodes.c utils/types.c utils/variables.c -I include -o "../bin/typec" -Wall -Wextra -Werror -Wpedantic
 ../bin/typec $1
 
 
@@ -41,7 +41,7 @@ if hash dot 2>/dev/null; then
   echo "#########"
   echo "# Graph #"
   echo "#########"
-  gcc graphviz.c utils/symbols.c utils/file.c utils/nodes.c -I include -o "../bin/graph" -Wall -Werror -Wpedantic
+  gcc graphviz.c utils/symbols.c utils/file.c utils/nodes.c -I include -o "../bin/graph" -Wall -Wextra -Werror -Wpedantic
   ../bin/graph $1
   dot -Tpng ../bin/$1.dot > ../bin/$1.png
 fi
@@ -54,14 +54,14 @@ echo ""
 echo "###########"
 echo "# Codegen #"
 echo "###########"
-gcc codegen.c utils/symbols.c utils/file.c utils/nodes.c utils/types.c utils/variables.c -I include -o "../bin/codegen" -Wall -Werror -Wpedantic
+gcc codegen.c utils/symbols.c utils/file.c utils/nodes.c utils/types.c utils/variables.c -I include -o "../bin/codegen" -Wall -Wextra -Werror -Wpedantic
 ../bin/codegen $1
 
 echo ""
 echo "#################"
 echo "# Jump Resolver #"
 echo "#################"
-gcc jumpresolver.c utils/file.c -I include -o "../bin/jumpr" -Wall -Werror -Wpedantic
+gcc jumpresolver.c utils/file.c -I include -o "../bin/jumpr" -Wall -Wextra -Werror -Wpedantic
 ../bin/jumpr $1
 
 
@@ -69,6 +69,6 @@ echo ""
 echo "######"
 echo "# VM #"
 echo "######"
-gcc vm.c utils/symbols.c utils/file.c -I include -o "../bin/vm" -Wall -Werror -Wpedantic
+gcc vm.c utils/symbols.c utils/file.c -I include -o "../bin/vm" -Wall -Wextra -Werror -Wpedantic
 ../bin/vm $1
 

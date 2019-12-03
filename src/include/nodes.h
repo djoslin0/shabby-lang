@@ -2,7 +2,7 @@
 #define NODES_H
 #include "constants.h"
 
-enum {
+typedef enum {
     // Parser Only
     NT_NONE,
     NT_ROOT,
@@ -29,7 +29,7 @@ enum {
     #ifdef DEBUG
         NT_DEBUG_UNINDENT_NODE,
     #endif
-} typedef node_t;
+} node_t;
 
 
 #define NTP_DECLARATION_BYTES 0
@@ -39,12 +39,12 @@ enum {
 #define NTP_VARIABLE_ADDRESS 0
 
 #ifdef DEBUG
-struct {
+typedef struct {
     char name[MAX_TOKEN_LEN+1];
     uint8_t child_count;
     uint8_t param_count;
     uint8_t output_token_count;
-} typedef node_s;
+} node_s;
 
 static node_s node_constants[] = {
     // Parser Only
@@ -75,14 +75,14 @@ static node_s node_constants[] = {
 #endif
 
 #define MAX_AST_CHILDREN 4
-struct {
+typedef struct {
     uint16_t offset;
     node_t node_type;
     uint8_t value_type;
     uint16_t scratch;
     uint16_t parent_offset;
     uint16_t children[MAX_AST_CHILDREN];
-} typedef ast_s;
+} ast_s;
 
 #define AST_ADDR_NODE_TYPE(offset) (offset)
 #define AST_ADDR_VALUE_TYPE(offset) (AST_ADDR_NODE_TYPE(offset) + 1)

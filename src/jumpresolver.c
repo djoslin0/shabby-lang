@@ -19,10 +19,10 @@ static FILE *bin_ptr = NULL; // binary output
 
 #define MAX_LABELS 128
 
-struct {
+typedef struct {
     uint16_t label;
     uint16_t offset;
-} typedef label_s;
+} label_s;
 static label_s labels[MAX_LABELS] = { 0 };
 static uint8_t on_label = 0;
 

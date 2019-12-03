@@ -16,7 +16,7 @@ static FILE *bin_ptr = NULL; // binary bytecode
  // execution stack //
 /////////////////////
 
-#define EXEC_STACK_SIZE 256
+#define EXEC_STACK_SIZE 255
 static uint8_t exec_stack[EXEC_STACK_SIZE];
 static uint8_t exec_stack_count = 0;
 
@@ -45,13 +45,13 @@ static uint8_t exec_pop8(void) {
 
 static uint8_t exec_get8(uint16_t index) {
     uint16_t offset = (frame_ptr + index);
-    assert(offset >= 0 && offset < exec_stack_count);
+    assert(offset < exec_stack_count);
     return exec_stack[offset];
 }
 
 static void exec_set8(uint16_t index, uint8_t value) {
     uint16_t offset = (frame_ptr + index);
-    assert(offset >= 0 && offset < exec_stack_count);
+    assert(offset < exec_stack_count);
     exec_stack[offset] = value;
 }
 
@@ -70,13 +70,13 @@ static uint16_t exec_pop16(void) {
 
 static uint16_t exec_get16(uint16_t index) {
     uint16_t offset = (frame_ptr + index);
-    assert(offset >= 0 && offset < exec_stack_count);
+    assert(offset < exec_stack_count);
     return *(uint16_t*)(&exec_stack[offset]);
 }
 
 static void exec_set16(uint16_t index, uint16_t value) {
     uint16_t offset = (frame_ptr + index);
-    assert(offset >= 0 && offset < exec_stack_count);
+    assert(offset < exec_stack_count);
     *(uint16_t*)(&exec_stack[offset]) = value;
 }
 
@@ -97,7 +97,7 @@ static void exec_set16(uint16_t index, uint16_t value) {
 // misc
 static void vm_extend(void) {
     assert(exec_stack_count > 0);
-    exec_stack[exec_stack_count - 1] >= 0
+    ((int8_t)exec_stack[exec_stack_count - 1]) >= 0
         ? exec_push8(0)
         : exec_push8((uint8_t)-1);
 }

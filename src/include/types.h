@@ -1,19 +1,19 @@
 #ifndef TYPES_H
 #define TYPES_H
 
-enum {
+typedef enum {
     TYPE_NONE,
     TYPE_BYTE,
     TYPE_SHORT,
     //TYPE_INT,
     //TYPE_FLOAT,
     TYPE_USER_DEFINED,
-} typedef type_t;
+} type_t;
 
-struct {
+typedef struct {
     uint16_t size;
     char name[MAX_TOKEN_LEN+1];
-} typedef type_s;
+} type_s;
 
 static type_s types[] = {
     [TYPE_USER_DEFINED] = { .size = 0, .name = "<user defined>" },

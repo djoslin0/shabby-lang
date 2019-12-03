@@ -39,10 +39,10 @@ static ast_s peeked_node = { 0 };
  // scheduled future nodes //
 ////////////////////////////
 
-struct {
+typedef struct {
     uint16_t offset;
     uint8_t attempts;
-} typedef future_info_s;
+} future_info_s;
 
 static future_info_s future_stack[FUTURE_STACK_SIZE] = { 0 };
 static uint16_t future_stack_count = 0;

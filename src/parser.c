@@ -29,12 +29,12 @@ static uint16_t token_count = 0; // the total number of tokens
 #define FUTURE_FLAG_STATEMENTS (1 << 0)
 #define FUTURE_FLAG_INSERT (1 << 1)
 
-struct {
+typedef struct {
     node_t node;
     uint16_t parent_offset;
     uint8_t child_index;
     uint8_t flags;
-} typedef future_node_s;
+} future_node_s;
 
 static future_node_s future_stack[FUTURE_STACK_SIZE] = { 0 };
 static uint16_t future_stack_count = 0;
