@@ -8,14 +8,15 @@
 
 struct {
     type_t type;
-    char name[MAX_TOKEN_LEN];
+    char name[MAX_TOKEN_LEN+1];
     uint8_t scope;
     uint8_t address;
     uint16_t size;
+    uint16_t offset;
 } typedef var_s;
 
 var_s* get_variable(char*);
-uint16_t store_variable(type_t, char*, uint16_t);
+uint16_t store_variable(type_t, char*, uint16_t, uint16_t);
 void scope_increment(void);
 void scope_decrement(void);
 

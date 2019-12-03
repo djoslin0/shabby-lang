@@ -18,22 +18,14 @@ static FILE *ast_ptr = NULL; // ast input/output
  // token utilities //
 /////////////////////
 
-static char token[MAX_TOKEN_LEN];
+static char token[MAX_TOKEN_LEN+1];
+// TODO: consolidate
 static void read_token(void) {
     int last_position = ftell(ast_ptr);
     memset(token, NULL, MAX_TOKEN_LEN);
     fgets(token, MAX_TOKEN_LEN, ast_ptr);
     assert(strlen(token) < MAX_TOKEN_LEN);
     fseek(ast_ptr, last_position + strlen(token) + 1, 0);
-}
-
-static char peeked_token[MAX_TOKEN_LEN];
-static void peek_token(void) {
-    int last_position = ftell(ast_ptr);
-    memset(peeked_token, NULL, MAX_TOKEN_LEN);
-    fgets(peeked_token, MAX_TOKEN_LEN, ast_ptr);
-    assert(strlen(peeked_token) < MAX_TOKEN_LEN);
-    fseek(ast_ptr, last_position + strlen(peeked_token) + 1, 0);
 }
 
   //////////
@@ -78,48 +70,6 @@ static future_info_s future_pop(void) {
     return future_stack[future_stack_count];
 }
 
-  /////////////////////
- // class utilities //
-/////////////////////
-
-static uint16_t get_user_type(uint16_t offset) {
-    // read current
-    ast_read_node(ast_ptr, offset, &peeked_node);
-    uint16_t highest_offset = peeked_node.parent_offset;
-
-    // search up
-    while (offset != NULL) {
-        // read current
-        ast_read_node(ast_ptr, offset, &peeked_node);
-        uint16_t next_offset = highest_offset;
-        if (peeked_node.offset == highest_offset) {
-            highest_offset = peeked_node.parent_offset;
-        }
-
-        // look only at statement
-        if (peeked_node.node_type != NT_STATEMENT) { goto next_up; }
-
-        // explore down before going up
-        if (peeked_node.children[0] != NULL) { next_offset = peeked_node.children[0]; }
-
-        // look only at statements child
-        ast_read_node(ast_ptr, peeked_node.children[1], &peeked_node);
-        if (peeked_node.node_type != NT_CLASS) { goto next_up; }
-
-        // look only at matching tokens
-        peek_token();
-        if (strcmp(token, peeked_token)) { goto next_up; }
-
-        return peeked_node.offset;
-
-next_up:
-        // schedule parent
-        offset = next_offset;
-    }
-
-    assert(FALSE);
-}
-
   /////////////////////////////
  // symbol generation phase //
 /////////////////////////////
@@ -142,7 +92,7 @@ static void sg_declaration(uint8_t attempts) {
         case TYPE_BYTE: size = 1; is_type_ready = TRUE; break;
         case TYPE_SHORT: size = 2; is_type_ready = TRUE; break;
         default:
-            type_offset = get_user_type(cur_node.parent_offset);
+            type_offset = get_user_type(ast_ptr, token, cur_node.parent_offset);
             assert(type_offset != NULL);
             pending = ast_get_param(ast_ptr, NT_CLASS, type_offset, NTP_CLASS_PENDING);
             is_type_ready = (pending == PENDING_FLAG_DIRTY);

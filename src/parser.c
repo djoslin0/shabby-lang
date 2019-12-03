@@ -18,13 +18,8 @@ static FILE *ast_ptr = NULL; // output
  // token information //
 ///////////////////////
 
-struct {
-    char string[MAX_TOKEN_LEN+1];
-    uint16_t next_index;
-} typedef token_s;
-
-static token_s cur_token = { 0 }; // the current token being evaluated
-static token_s peeked_token = { 0 }; // the token we last peeked at
+static char cur_token[MAX_TOKEN_LEN+1] = { 0 }; // the current token being evaluated
+static uint16_t next_token_index = 0; // the next token index to evaluate
 static uint16_t token_count = 0; // the total number of tokens
 
   ////////////////////////////
@@ -65,7 +60,7 @@ static future_node_s* future_pop(void) {
 /////////////////////////////
 
 #ifdef DEBUG
-    static void peek_token(uint16_t index);
+    static void peek_token(char* buffer, uint16_t index);
     int* stack_start;
     static int _indent = 0;
     #define INDENT(x) _indent += x
@@ -83,9 +78,10 @@ static future_node_s* future_pop(void) {
         printf("%s: ", string);
 
         // print tokens
+        char peeked_token[MAX_TOKEN_LEN+1];
         for (int i = 0; i < tokens; i++) {
-            peek_token(cur_token.next_index + i - 1);
-            printf("%s ", peeked_token.string);
+            peek_token(peeked_token, next_token_index + i - 1);
+            printf("%s ", peeked_token);
         }
 
         printf("\n");
@@ -101,31 +97,30 @@ static future_node_s* future_pop(void) {
 
 static void next_token() {
     // bounds checking
-    if (cur_token.next_index >= token_count) {
-        cur_token.string[0] = NULL;
-        cur_token.next_index++;
+    if (next_token_index >= token_count) {
+        cur_token[0] = NULL;
+        next_token_index++;
         return;
     }
 
     // obtain token offsets
-    fseek(tok_ptr, 2 + cur_token.next_index * 3, 0);
+    fseek(tok_ptr, 2 + next_token_index * 3, 0);
     uint16_t start_index = fget16(tok_ptr);
     uint8_t length = fgetc(tok_ptr);
     assert(length <= MAX_TOKEN_LEN);
 
     // obtain token string
     fseek(src_ptr, start_index, 0);
-    fgets(cur_token.string, length+1, src_ptr);
-    cur_token.string[length] = NULL;
+    fgets(cur_token, length+1, src_ptr);
+    cur_token[length] = NULL;
 
-    cur_token.next_index++;
+    next_token_index++;
 }
 
-static void peek_token(uint16_t index) {
+static void peek_token(char* buffer, uint16_t index) {
     // bounds checking
     if (index >= token_count) {
-        peeked_token.string[0] = NULL;
-        peeked_token.next_index = index + 1;
+        buffer[0] = NULL;
         return;
     }
 
@@ -137,10 +132,8 @@ static void peek_token(uint16_t index) {
 
     // obtain token string
     fseek(src_ptr, start_index, 0);
-    fgets(peeked_token.string, length+1, src_ptr);
-    peeked_token.string[length] = NULL;
-
-    peeked_token.next_index = index + 1;
+    fgets(buffer, length+1, src_ptr);
+    buffer[length] = NULL;
 }
 
 static uint16_t output(node_t node_type, uint16_t parent_offset, uint8_t child_index) {
@@ -157,17 +150,17 @@ static void parse_cast(uint16_t parent_offset, uint8_t child_index) {
     // output: [base node] <factor*> <token>
 
     // validate identifier
-    assert(is_alpha(cur_token.string[0]) || cur_token.string[0] == '_');
+    assert(is_alpha(cur_token[0]) || cur_token[0] == '_');
     for (uint8_t i = 0; i < MAX_TOKEN_LEN; i++) {
-        if (cur_token.string[i] == NULL) { break; }
-        assert(is_alphanumeric(cur_token.string[i]) || cur_token.string[i] == '_');
+        if (cur_token[i] == NULL) { break; }
+        assert(is_alphanumeric(cur_token[i]) || cur_token[i] == '_');
     }
 
     // write base node
     uint8_t my_offset = output(NT_CAST, parent_offset, child_index);
 
     // output token
-    fputs(cur_token.string, ast_ptr);
+    fputs(cur_token, ast_ptr);
     fputc(NULL, ast_ptr);
     next_token();
 
@@ -182,37 +175,69 @@ static void parse_constant(uint16_t parent_offset, uint8_t child_index) {
 
     // validate constant
     for (uint8_t i = 0; i < MAX_TOKEN_LEN; i++) {
-        if (cur_token.string[i] == NULL) { break; }
-        assert(is_numeric(cur_token.string[i]));
+        if (cur_token[i] == NULL) { break; }
+        assert(is_numeric(cur_token[i]));
     }
 
     // write base node
     output(NT_CONSTANT, parent_offset, child_index);
 
     // output token
-    fputs(cur_token.string, ast_ptr);
+    fputs(cur_token, ast_ptr);
     fputc(NULL, ast_ptr);
     next_token();
 }
 
-static void parse_variable(uint16_t parent_offset, uint8_t child_index) {
-    // <variable> ::= ( '[a-zA-Z_][a-zA-Z0-9_]*' )
-    // output: [base node] <token>
+static void parse_member(uint16_t parent_offset, uint8_t child_index) {
+    // <member> ::= ( '[a-zA-Z_][a-zA-Z0-9_]*' )
+    // output: [base node] <*next_member> <token>
 
     // validate identifier
-    assert(is_alpha(cur_token.string[0]) || cur_token.string[0] == '_');
+    assert(is_alpha(cur_token[0]) || cur_token[0] == '_');
     for (uint8_t i = 0; i < MAX_TOKEN_LEN; i++) {
-        if (cur_token.string[i] == NULL) { break; }
-        assert(is_alphanumeric(cur_token.string[i]) || cur_token.string[i] == '_');
+        if (cur_token[i] == NULL) { break; }
+        assert(is_alphanumeric(cur_token[i]) || cur_token[i] == '_');
     }
 
     // write base node
-    output(NT_VARIABLE, parent_offset, child_index);
+    uint16_t my_offset = output(NT_MEMBER, parent_offset, child_index);
 
     // output token
-    fputs(cur_token.string, ast_ptr);
+    fputs(cur_token, ast_ptr);
     fputc(NULL, ast_ptr);
     next_token();
+
+    // schedule member
+    if (cur_token[0] == '.' && cur_token[1] == NULL) {
+        next_token();
+        future_push(NT_MEMBER, my_offset, 0, NULL);
+    }
+}
+
+static void parse_variable(uint16_t parent_offset, uint8_t child_index) {
+    // <variable> ::= ( '[a-zA-Z_][a-zA-Z0-9_]*' )
+    // output: [base node] <*member> <token>
+
+    // validate identifier
+    assert(is_alpha(cur_token[0]) || cur_token[0] == '_');
+    for (uint8_t i = 0; i < MAX_TOKEN_LEN; i++) {
+        if (cur_token[i] == NULL) { break; }
+        assert(is_alphanumeric(cur_token[i]) || cur_token[i] == '_');
+    }
+
+    // write base node
+    uint16_t my_offset = output(NT_VARIABLE, parent_offset, child_index);
+
+    // output token
+    fputs(cur_token, ast_ptr);
+    fputc(NULL, ast_ptr);
+    next_token();
+
+    // schedule member
+    if (cur_token[0] == '.' && cur_token[1] == NULL) {
+        next_token();
+        future_push(NT_MEMBER, my_offset, 0, NULL);
+    }
 }
 
 static void parse_unary_op(uint16_t parent_offset, uint8_t child_index) {
@@ -220,14 +245,14 @@ static void parse_unary_op(uint16_t parent_offset, uint8_t child_index) {
     // output: [base node] <token>
 
     // validate unary op
-    if (!is_unary_op(cur_token.string[0])) { return; }
-    assert(cur_token.string[1] == NULL);
+    if (!is_unary_op(cur_token[0])) { return; }
+    assert(cur_token[1] == NULL);
 
     // write base node
     output(NT_UNARY_OP, parent_offset, child_index);
 
     // output token
-    fputs(cur_token.string, ast_ptr);
+    fputs(cur_token, ast_ptr);
     fputc(NULL, ast_ptr);
     next_token();
 }
@@ -246,10 +271,11 @@ static void parse_factor(uint16_t parent_offset, uint8_t child_index) {
     #endif
 
     // peek ahead if current token is a unary operator
-    char* value_str = cur_token.string;
-    if (is_unary_op(cur_token.string[0])) {
-        peek_token(cur_token.next_index);
-        value_str = peeked_token.string;
+    char peeked_token[MAX_TOKEN_LEN+1];
+    char* value_str = cur_token;
+    if (is_unary_op(cur_token[0])) {
+        peek_token(peeked_token, next_token_index);
+        value_str = peeked_token;
     }
 
     if (is_numeric(value_str[0])) {
@@ -280,8 +306,8 @@ static void parse_term_op(uint16_t parent_offset, uint8_t child_index, uint8_t f
     // output: [base node] <token>
 
     // validate term op
-    if (!is_term_op(cur_token.string[0])) { return; }
-    assert(cur_token.string[1] == NULL);
+    if (!is_term_op(cur_token[0])) { return; }
+    assert(cur_token[1] == NULL);
 
     // check to see if this is a nested term
     if (flags & FUTURE_FLAG_INSERT) {
@@ -300,7 +326,7 @@ static void parse_term_op(uint16_t parent_offset, uint8_t child_index, uint8_t f
     output(NT_TERM_OP, parent_offset, child_index);
 
     // output token
-    fputs(cur_token.string, ast_ptr);
+    fputs(cur_token, ast_ptr);
     fputc(NULL, ast_ptr);
     next_token();
 
@@ -336,8 +362,8 @@ static void parse_expression_op(uint16_t parent_offset, uint8_t child_index, uin
     // output: [base node] <token>
 
     // validate expression op
-    if (!is_expression_op(cur_token.string[0])) { return; }
-    assert(cur_token.string[1] == NULL);
+    if (!is_expression_op(cur_token[0])) { return; }
+    assert(cur_token[1] == NULL);
 
     // check to see if this is a nested expression
     if (flags & FUTURE_FLAG_INSERT) {
@@ -356,7 +382,7 @@ static void parse_expression_op(uint16_t parent_offset, uint8_t child_index, uin
     output(NT_EXPRESSION_OP, parent_offset, child_index);
 
     // output token
-    fputs(cur_token.string, ast_ptr);
+    fputs(cur_token, ast_ptr);
     fputc(NULL, ast_ptr);
     next_token();
 
@@ -389,7 +415,7 @@ static void parse_expression(uint16_t parent_offset, uint8_t child_index) {
 
 static void parse_assignment(uint16_t parent_offset, uint8_t child_index) {
     // <assignment> ::= <identifier> '=' <expression>
-    // output: [base node] <*expression> <var_identifier>
+    // output: [base node] <*expression> <*member> <var_identifier>
 
     // write base node
     uint16_t my_offset = output(NT_ASSIGNMENT, parent_offset, child_index);
@@ -401,17 +427,22 @@ static void parse_assignment(uint16_t parent_offset, uint8_t child_index) {
     #endif
 
     // output var identifier
-    assert(is_identifier(cur_token.string));
-    fputs(cur_token.string, ast_ptr); // var identifier
+    assert(is_identifier(cur_token));
+    fputs(cur_token, ast_ptr); // var identifier
     fputc(NULL, ast_ptr);
-    next_token();
-
-    // ensure we set the variable
-    assert(cur_token.string[0] == '=' && cur_token.string[1] == NULL);
     next_token();
 
     // schedule expression
     future_push(NT_EXPRESSION, my_offset, 0, NULL);
+
+    // expect '=' sign
+    future_push(NT_CONSUME, NULL, NULL, '=');
+
+    // schedule member
+    if (cur_token[0] == '.' && cur_token[1] == NULL) {
+        next_token();
+        future_push(NT_MEMBER, my_offset, 1, NULL);
+    }
 }
 
 static void parse_declaration(uint16_t parent_offset, uint8_t child_index) {
@@ -427,19 +458,19 @@ static void parse_declaration(uint16_t parent_offset, uint8_t child_index) {
     #endif
 
     // output var type token
-    assert(is_identifier(cur_token.string));
-    fputs(cur_token.string, ast_ptr); // var token
+    assert(is_identifier(cur_token));
+    fputs(cur_token, ast_ptr); // var token
     fputc(NULL, ast_ptr);
     next_token();
 
     // output var identifier
-    assert(is_identifier(cur_token.string));
-    fputs(cur_token.string, ast_ptr); // var identifier
+    assert(is_identifier(cur_token));
+    fputs(cur_token, ast_ptr); // var identifier
     fputc(NULL, ast_ptr);
     next_token();
 
     // setting variable
-    if (cur_token.string[0] == '=' && cur_token.string[1] == NULL) {
+    if (cur_token[0] == '=' && cur_token[1] == NULL) {
         future_push(NT_EXPRESSION, my_offset, 0, NULL);
         next_token();
     }
@@ -449,7 +480,7 @@ static void parse_statement(uint16_t parent_offset, uint8_t child_index, uint8_t
     // <statement> ::= <declaration | assignment> ';'
     // output: [base node] <*next_statement> <*assignment | *declaration>
 
-    if (!is_identifier(cur_token.string)) { return; }
+    if (!is_identifier(cur_token)) { return; }
 
     // write base node
     uint16_t my_offset = output(NT_STATEMENT, parent_offset, child_index);
@@ -466,7 +497,7 @@ static void parse_statement(uint16_t parent_offset, uint8_t child_index, uint8_t
     #endif
 
     // schedule class
-    if (!strcmp(cur_token.string, "class")) {
+    if (!strcmp(cur_token, "class")) {
         future_push(NT_CLASS, my_offset, 1, NULL);
         return;
     }
@@ -474,8 +505,10 @@ static void parse_statement(uint16_t parent_offset, uint8_t child_index, uint8_t
     // expect ';' at the end
     future_push(NT_CONSUME, NULL, NULL, ';');
 
-    peek_token(cur_token.next_index);
-    if (peeked_token.string[0] == '=' && peeked_token.string[1] == NULL) {
+    // decide which type of statement it is
+    char peeked_token[MAX_TOKEN_LEN+1];
+    peek_token(peeked_token, next_token_index);
+    if (peeked_token[1] == NULL && (peeked_token[0] == '=' || peeked_token[0] == '.')) {
         // schedule assignment
         future_push(NT_ASSIGNMENT, my_offset, 1, NULL);
     } else {
@@ -513,17 +546,17 @@ static void parse_class(uint16_t parent_offset, uint8_t child_index) {
     #endif
 
     // verify class token
-    assert(!strcmp(cur_token.string, "class"));
+    assert(!strcmp(cur_token, "class"));
     next_token();
 
     // output class identifier
-    assert(is_identifier(cur_token.string));
-    fputs(cur_token.string, ast_ptr); // class identifier
+    assert(is_identifier(cur_token));
+    fputs(cur_token, ast_ptr); // class identifier
     fputc(NULL, ast_ptr);
     next_token();
 
     // read class
-    assert(cur_token.string[0] == '{' && cur_token.string[1] == NULL);
+    assert(cur_token[0] == '{' && cur_token[1] == NULL);
     // expect '}' at the end
     future_push(NT_CONSUME, NULL, NULL, '}');
     future_push(NT_STATEMENT_LIST, my_offset, 0, NULL);
@@ -535,12 +568,12 @@ static void parse_consume(char c) {
     // eats given character from token stream
     // output:
 
-    if (cur_token.string[0] != c) {
-        printf("Syntax error!\n Expected '%c' but got '%c'.\n", c, cur_token.string[0]);
+    if (cur_token[0] != c) {
+        printf("Syntax error!\n Expected '%c' but got '%c'.\n", c, cur_token[0]);
     }
 
-    assert(cur_token.string[0] == c);
-    assert(cur_token.string[1] == NULL);
+    assert(cur_token[0] == c);
+    assert(cur_token[1] == NULL);
 
     next_token();
 }
@@ -587,6 +620,7 @@ void parse(FILE* src_ptr_arg, FILE* tok_ptr_arg, FILE* out_ptr_arg) {
             case NT_FACTOR: parse_factor(n->parent_offset, n->child_index); break;
             case NT_UNARY_OP: parse_unary_op(n->parent_offset, n->child_index); break;
             case NT_VARIABLE: parse_variable(n->parent_offset, n->child_index); break;
+            case NT_MEMBER: parse_member(n->parent_offset, n->child_index); break;
             case NT_CONSTANT: parse_constant(n->parent_offset, n->child_index); break;
             case NT_CAST: parse_cast(n->parent_offset, n->child_index); break;
             #ifdef DEBUG

@@ -7,7 +7,7 @@ struct {
     uint8_t params;
     uint8_t param_size;
     #ifdef DEBUG
-    char name[MAX_TOKEN_LEN];
+    char name[MAX_TOKEN_LEN+1];
     #endif
 } typedef bytecode_s;
 

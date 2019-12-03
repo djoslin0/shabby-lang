@@ -39,7 +39,7 @@ static uint16_t future_pop(void) {
  // token utilities //
 /////////////////////
 
-static char token[MAX_TOKEN_LEN];
+static char token[MAX_TOKEN_LEN+1];
 static void read_token(void) {
     int last_position = ftell(ast_ptr);
     memset(token, NULL, MAX_TOKEN_LEN);

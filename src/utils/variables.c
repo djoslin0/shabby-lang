@@ -28,7 +28,7 @@ var_s* get_variable(char* name) {
     return NULL;
 }
 
-uint16_t store_variable(type_t type, char* name, uint16_t size) {
+uint16_t store_variable(type_t type, char* name, uint16_t size, uint16_t offset) {
     assert(vars_count < MAX_VARS_IN_SCOPE);
     var_s* same_name = get_variable(name);
     assert(same_name == NULL || same_name->scope < current_scope);
@@ -45,6 +45,9 @@ uint16_t store_variable(type_t type, char* name, uint16_t size) {
 
     // store size
     vars[vars_count].size = size;
+
+    // store offset
+    vars[vars_count].offset = offset;
 
     // calculate and store address
     uint16_t address = 0;

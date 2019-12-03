@@ -56,7 +56,7 @@ static uint16_t future_pop(void) {
  // token utilities //
 /////////////////////
 
-static char token[MAX_TOKEN_LEN];
+static char token[MAX_TOKEN_LEN+1];
 static void read_token(void) {
     int last_position = ftell(ast_ptr);
     memset(token, NULL, MAX_TOKEN_LEN);
@@ -180,7 +180,7 @@ static void ce_propagate(uint32_t value) {
     }
 }
 
-static void ec_evaluate(void) {
+static void ce_evaluate(void) {
     // move to root node
     fseek(ast_ptr, 0, 0);
     future_push(fget16(ast_ptr));
@@ -265,6 +265,74 @@ static void tc_propagate(type_t type) {
     }
 }
 
+static type_t tc_member_address_and_type(var_s* var, uint16_t assign_member_offset) {
+    assert(cur_node.node_type == NT_ASSIGNMENT || cur_node.node_type == NT_VARIABLE);
+
+    type_t type = var->type;
+    uint16_t search_type_from_offset = cur_node.offset;
+
+    if (assign_member_offset != NULL) {
+        uint16_t member_address = 0;
+        char peeked_token[MAX_TOKEN_LEN+1];
+        // get user type token
+        ast_read_node(ast_ptr, var->offset, &peeked_node);
+next_member_resolve:
+        ast_peek_token(ast_ptr, peeked_token);
+        printf("user type token: %s\n", peeked_token);
+
+        // get user type offset
+        uint16_t user_type_offset = get_user_type(ast_ptr, peeked_token, search_type_from_offset);
+        assert(user_type_offset != NULL);
+
+        // find type member name
+        ast_read_node(ast_ptr, assign_member_offset, &peeked_node);
+        ast_peek_token(ast_ptr, peeked_token);
+        uint16_t next_member_offset = peeked_node.children[0];
+        printf("member type name: %s\n", peeked_token);
+
+        // find member offset
+        uint16_t type_member_offset = ast_get_member(ast_ptr, user_type_offset, peeked_token);
+        assert(type_member_offset != NULL);
+        printf("type member offset: %04X\n", type_member_offset);
+
+        // read the type's member
+        ast_read_node(ast_ptr, type_member_offset, &peeked_node);
+        type = peeked_node.value_type;
+
+        // continue resolving if this is a user defined type
+        if (type == TYPE_USER_DEFINED) {
+            assert(next_member_offset != NULL);
+            uint16_t return_offset = ftell(ast_ptr);
+
+            // remember address offset
+            member_address += ast_get_member_address(ast_ptr, type_member_offset);
+
+            // write this member's type
+            ast_write_type(type, assign_member_offset);
+
+            // goto the next member in the list
+            assign_member_offset = next_member_offset;
+            search_type_from_offset = type_member_offset;
+
+            fseek(ast_ptr, return_offset, 0);
+            goto next_member_resolve;
+        }
+        assert(type != TYPE_NONE);
+
+        // write final member offset to assignment/variable ast node param
+        member_address += ast_get_member_address(ast_ptr, type_member_offset);
+        if (cur_node.node_type == NT_ASSIGNMENT) {
+            ast_set_param(ast_ptr, NT_ASSIGNMENT, cur_node.offset, NTP_ASSIGNMENT_ADDRESS, member_address);
+        } else if (cur_node.node_type == NT_VARIABLE) {
+            ast_set_param(ast_ptr, NT_VARIABLE, cur_node.offset, NTP_VARIABLE_ADDRESS, member_address);
+        }
+
+        // write assignment's member type
+        ast_write_type(type, assign_member_offset);
+    }
+    return type;
+}
+
 static void tc_cast(void) {
     read_token();
     type_t type = get_type(token);
@@ -276,8 +344,11 @@ static void tc_cast(void) {
 static void tc_variable(void) {
     read_token();
     var_s* var = get_variable(token);
-    assert(var->type != TYPE_NONE);
-    tc_propagate(var->type);
+    assert(var != NULL);
+
+    type_t type = tc_member_address_and_type(var, cur_node.children[0]);
+    assert(type != TYPE_NONE);
+    tc_propagate(type);
 }
 
 static void tc_constant(void) {
@@ -338,8 +409,12 @@ static void tc_expression(void) {
 static void tc_assignment(void) {
     read_token();
     var_s* var = get_variable(token);
+    assert(var != NULL);
     assert(var->type != TYPE_NONE);
-    ast_write_type(var->type, cur_node.offset);
+
+    type_t type = tc_member_address_and_type(var, cur_node.children[1]);
+    assert(type != TYPE_NONE);
+    ast_write_type(type, cur_node.offset);
 }
 
 static void tc_declaration(void) {
@@ -350,7 +425,7 @@ static void tc_declaration(void) {
     }
 
     read_token();
-    store_variable(type, token, types[type].size);
+    store_variable(type, token, types[type].size, cur_node.offset);
 
     ast_write_type(type, cur_node.offset);
 }
@@ -422,11 +497,23 @@ static void cast_evaluate(void) {
             if (cur_node.value_type == TYPE_NONE) { continue; }
             ast_read_node(ast_ptr, cur_node.children[i], &peeked_node);
 
+            // don't cast members
+            if (peeked_node.node_type == NT_MEMBER) { continue; }
+
+            // don't cast between user defined types and built in types
+            if (cur_node.value_type == TYPE_USER_DEFINED) {
+                assert(peeked_node.value_type == TYPE_USER_DEFINED);
+            }
+            if (peeked_node.value_type == TYPE_USER_DEFINED) {
+                assert(cur_node.value_type == TYPE_USER_DEFINED);
+            }
+
             // only up-cast
             if (peeked_node.value_type == TYPE_NONE) { continue; }
             if (peeked_node.value_type == cur_node.value_type) { continue; }
             assert(peeked_node.value_type < cur_node.value_type);
             insert_cast(cur_node.value_type, cur_node.offset, peeked_node.offset);
+            printf("INSERTED %s %s!\n", types[cur_node.value_type].name, types[peeked_node.value_type].name);
         }
 
     }
@@ -437,12 +524,15 @@ void typecheck(FILE *ast_ptr_arg) {
     ast_ptr = ast_ptr_arg;
 
     // evaluate constant expressions
-    ec_evaluate();
+    printf("Constant expression phase...\n");
+    ce_evaluate();
 
     // evaluate and propagate types
+    printf("Typechecking phase...\n");
     tc_evaluate();
 
     // insert casts where required
+    printf("Casting phase...\n");
     cast_evaluate();
 }
 

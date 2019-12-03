@@ -4,11 +4,17 @@
 #include "symbols.h"
 #include "file.h"
 
-// file pointers
+  ///////////////////
+ // file pointers //
+///////////////////
+
 static FILE *src_ptr = NULL; // source code
 static FILE *tok_ptr = NULL; // output
 
-// input state
+  /////////////////
+ // input state //
+/////////////////
+
 static uint8_t c = 0; // current character
 static uint16_t c_index = -1; // index of the current character
 

@@ -33,7 +33,8 @@ static ast_s peeked_node = { 0 };
  // token utilities //
 /////////////////////
 
-static char token[MAX_TOKEN_LEN];
+static char token[MAX_TOKEN_LEN+1];
+// TODO: consolidate
 static void read_token(void) {
     int last_position = ftell(ast_ptr);
     memset(token, NULL, MAX_TOKEN_LEN);
@@ -42,62 +43,11 @@ static void read_token(void) {
     fseek(ast_ptr, last_position + strlen(token) + 1, 0);
 }
 
-// TODO: remove me or consolidate with symgen
-static char peeked_token[MAX_TOKEN_LEN];
-static void peek_token(void) {
-    int last_position = ftell(ast_ptr);
-    memset(peeked_token, NULL, MAX_TOKEN_LEN);
-    fgets(peeked_token, MAX_TOKEN_LEN, ast_ptr);
-    assert(strlen(peeked_token) < MAX_TOKEN_LEN);
-    fseek(ast_ptr, last_position + strlen(peeked_token) + 1, 0);
-}
-
   /////////////////////
  // class utilities //
 /////////////////////
 
 // TODO: remove me or consolidate with symgen
-static uint16_t get_user_type(uint16_t offset) {
-    uint16_t return_pos = ftell(ast_ptr);
-
-    // read current
-    ast_read_node(ast_ptr, offset, &peeked_node);
-    uint16_t highest_offset = peeked_node.parent_offset;
-
-    // search up
-    while (offset != NULL) {
-        // read current
-        ast_read_node(ast_ptr, offset, &peeked_node);
-        uint16_t next_offset = highest_offset;
-        if (peeked_node.offset == highest_offset) {
-            highest_offset = peeked_node.parent_offset;
-        }
-
-        // look only at statement
-        if (peeked_node.node_type != NT_STATEMENT) { goto next_up; }
-
-        // explore down before going up
-        if (peeked_node.children[0] != NULL) { next_offset = peeked_node.children[0]; }
-
-        // look only at statements child
-        ast_read_node(ast_ptr, peeked_node.children[1], &peeked_node);
-        if (peeked_node.node_type != NT_CLASS) { goto next_up; }
-
-        // look only at matching tokens
-        peek_token();
-        if (strcmp(token, peeked_token)) { goto next_up; }
-
-        fseek(ast_ptr, return_pos, 0);
-        return peeked_node.offset;
-
-next_up:
-        // schedule parent
-        offset = next_offset;
-    }
-
-    assert(FALSE);
-}
-
 static bool is_class_member(uint16_t offset) {
     // search up
     while (offset != NULL) {
@@ -230,7 +180,10 @@ static void gen_variable(void) {
     var_s* var = get_variable(token);
     assert(var != NULL);
 
-    output(SIZE_BC(BC_IGET8), var->address);
+    // get address offset
+    uint16_t address = ast_get_param(ast_ptr, NT_VARIABLE, cur_node.offset, NTP_VARIABLE_ADDRESS);
+
+    output(SIZE_BC(BC_IGET8), var->address + address);
 }
 
 static void gen_unary_op(void) {
@@ -290,8 +243,11 @@ static void gen_assignment(void) {
     var_s* var = get_variable(token);
     assert(var != NULL);
 
+    // get address offset
+    uint16_t address = ast_get_param(ast_ptr, NT_ASSIGNMENT, cur_node.offset, NTP_ASSIGNMENT_ADDRESS);
+
     // push pointer
-    output(BC_PUSH16, var->address);
+    output(BC_PUSH16, var->address + address);
 
     // schedule set
     future_push_bytecode(SIZE_BC(BC_SET8));
@@ -305,11 +261,12 @@ static void gen_declaration(void) {
     // variable type
     read_token();
     type_t type = get_type(token);
-
     // resolve user type
     uint16_t user_type_offset = NULL;
     if (type == TYPE_NONE) {
-        user_type_offset = get_user_type(cur_node.offset);
+        uint16_t return_to = ftell(ast_ptr);
+        user_type_offset = get_user_type(ast_ptr, token, cur_node.offset);
+        fseek(ast_ptr, return_to, 0);
         type = TYPE_USER_DEFINED;
     }
     assert(type != TYPE_NONE);
@@ -319,7 +276,7 @@ static void gen_declaration(void) {
 
     // remember variable
     read_token();
-    uint16_t addr = store_variable(type, token, bytes);
+    uint16_t addr = store_variable(type, token, bytes, cur_node.offset);
 
     // allocate bytes
     if (!is_class_member(cur_node.parent_offset)) {
@@ -335,6 +292,11 @@ static void gen_declaration(void) {
     if (type == TYPE_USER_DEFINED) {
         output(BC_CALL, addr, user_type_offset);
         assert(cur_node.children[0] == NULL);
+        return;
+    }
+
+    // don't set anything if there is nothing to set
+    if (cur_node.children[0] == NULL) {
         return;
     }
 

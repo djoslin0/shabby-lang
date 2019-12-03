@@ -21,6 +21,7 @@ enum {
     NT_FACTOR,
     NT_UNARY_OP,
     NT_VARIABLE,
+    NT_MEMBER,
     NT_CONSTANT,
     NT_CAST,
 
@@ -34,10 +35,12 @@ enum {
 #define NTP_DECLARATION_BYTES 0
 #define NTP_CLASS_BYTES 0
 #define NTP_CLASS_PENDING 1
+#define NTP_ASSIGNMENT_ADDRESS 0
+#define NTP_VARIABLE_ADDRESS 0
 
 #ifdef DEBUG
 struct {
-    char name[MAX_TOKEN_LEN];
+    char name[MAX_TOKEN_LEN+1];
     uint8_t child_count;
     uint8_t param_count;
     uint8_t output_token_count;
@@ -54,14 +57,15 @@ static node_s node_constants[] = {
     [NT_CLASS] = { "class", 1, 2, 1 },
     [NT_STATEMENT] = { "statement", 2, 0, 0 },
     [NT_DECLARATION] = { "declaration", 1, 1, 2 },
-    [NT_ASSIGNMENT] = { "assignment", 1, 0, 1 },
+    [NT_ASSIGNMENT] = { "assignment", 2, 1, 1 },
     [NT_EXPRESSION] = { "expression", 3, 0, 0 },
     [NT_EXPRESSION_OP] = { "expression_op", 0, 0, 1 },
     [NT_TERM] = { "term", 3, 0, 0 },
     [NT_TERM_OP] = { "term_op", 0, 0, 1 },
     [NT_FACTOR] = { "factor", 2, 0, 0 },
     [NT_UNARY_OP] = { "unary_op", 0, 0, 1 },
-    [NT_VARIABLE] = { "variable", 0, 0, 1 },
+    [NT_VARIABLE] = { "variable", 1, 1, 1 },
+    [NT_MEMBER] = { "member", 1, 0, 1 },
     [NT_CONSTANT] = { "constant", 0, 0, 1 },
     [NT_CAST] = { "cast", 1, 0, 1 },
 
@@ -92,10 +96,18 @@ struct {
                              : (AST_ADDR_CHILD(offset, node_constants[node_type].child_count ) + (uint16_t)param_index * 2))
 
 void ast_read_node(FILE*, uint16_t, ast_s*);
+
 uint16_t ast_new_node(FILE*, node_t, uint16_t, uint8_t);
 uint16_t ast_insert_new_node(FILE*, ast_s*);
+
 void ast_overwrite_scratch(FILE*, uint16_t, uint16_t);
+
 uint16_t ast_get_param(FILE*, node_t, uint16_t, uint8_t);
 void ast_set_param(FILE*, node_t, uint16_t, uint8_t, uint16_t);
+
+void ast_peek_token(FILE*, char*);
+
+uint16_t ast_get_member(FILE*, uint16_t, char*);
+uint16_t ast_get_member_address(FILE*, uint16_t);
 
 #endif

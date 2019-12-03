@@ -158,3 +158,72 @@ void ast_set_param(FILE* ast_ptr, node_t node_type, uint16_t offset, uint8_t par
     // reset the fp
     fseek(ast_ptr, return_offset, 0);
 }
+
+void ast_peek_token(FILE* ast_ptr, char* buffer) {
+    int last_position = ftell(ast_ptr);
+    memset(buffer, NULL, MAX_TOKEN_LEN);
+    fgets(buffer, MAX_TOKEN_LEN, ast_ptr);
+    assert(strlen(buffer) < MAX_TOKEN_LEN);
+    fseek(ast_ptr, last_position + strlen(buffer) + 1, 0);
+}
+
+uint16_t ast_get_member(FILE* ast_ptr, uint16_t user_type_offset, char* member_token) {
+    ast_s peeked_node = { 0 };
+    // read user type
+    ast_read_node(ast_ptr, user_type_offset, &peeked_node);
+    assert(peeked_node.node_type == NT_CLASS);
+
+    uint16_t next_offset = peeked_node.children[0];
+    while (next_offset != NULL) {
+        // read statement, prepare next statement
+        ast_read_node(ast_ptr, next_offset, &peeked_node);
+        next_offset = peeked_node.children[0];
+        assert(peeked_node.node_type == NT_STATEMENT);
+
+        // read declaration
+        if (peeked_node.children[1] == NULL) { continue; }
+        ast_read_node(ast_ptr, peeked_node.children[1], &peeked_node);
+        if (peeked_node.node_type != NT_DECLARATION) { continue; }
+
+        // check for matching token
+        char peeked_token[MAX_TOKEN_LEN+1];
+        ast_peek_token(ast_ptr, peeked_token); // skip over type token
+        ast_peek_token(ast_ptr, peeked_token); // retrieve member token
+        if (strcmp(peeked_token, member_token)) { continue; }
+
+        // found
+        return peeked_node.offset;
+    }
+
+    assert(FALSE);
+}
+
+uint16_t ast_get_member_address(FILE* ast_ptr, uint16_t type_member_offset) {
+    ast_s peeked_node = { 0 };
+    // read user type
+    ast_read_node(ast_ptr, type_member_offset, &peeked_node);
+    assert(peeked_node.node_type == NT_DECLARATION);
+
+    // read parent
+    ast_read_node(ast_ptr, peeked_node.parent_offset, &peeked_node);
+    assert(peeked_node.node_type == NT_STATEMENT);
+
+    uint16_t address = 0;
+    uint16_t next_offset = peeked_node.parent_offset;
+    while (next_offset != NULL) {
+        // read statement, prepare next statement
+        ast_read_node(ast_ptr, next_offset, &peeked_node);
+        next_offset = peeked_node.parent_offset;
+        if (peeked_node.node_type != NT_STATEMENT) { break; }
+
+        // read declaration
+        if (peeked_node.children[1] == NULL) { continue; }
+        ast_read_node(ast_ptr, peeked_node.children[1], &peeked_node);
+        if (peeked_node.node_type != NT_DECLARATION) { continue; }
+
+        // add to address
+        address += ast_get_param(ast_ptr, NT_DECLARATION, peeked_node.offset, NTP_DECLARATION_BYTES);
+    }
+
+    return address;
+}
