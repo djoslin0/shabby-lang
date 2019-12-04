@@ -25,6 +25,9 @@ typedef enum {
     NT_CONSTANT,
     NT_CAST,
 
+    // Testing
+    NT_TEST,
+
     // Debug
     #ifdef DEBUG
         NT_DEBUG_UNINDENT_NODE,
@@ -68,6 +71,9 @@ static node_s node_constants[] = {
     [NT_MEMBER] = { "member", 1, 0, 1 },
     [NT_CONSTANT] = { "constant", 0, 0, 1 },
     [NT_CAST] = { "cast", 1, 0, 1 },
+
+    // Testing
+    [NT_TEST] = {"$TEST", 0, 0, 1 },
 
     // debug
     [NT_DEBUG_UNINDENT_NODE] = { "debug_unindent_node", 0, 0, 0 },

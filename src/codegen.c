@@ -121,6 +121,7 @@ static void output(bytecode_t type, ...) {
 
     // output params
     if (bytecode[type].params > 0) {
+        assert(bytecode[type].params != BC_VARIABLE_PARAMS);
         va_list args;
         va_start(args, type);
         for (uint8_t i = 0; i < bytecode[type].params; i++) {
@@ -145,6 +146,42 @@ static void output(bytecode_t type, ...) {
   /////////////////////
  // code generation //
 /////////////////////
+
+static void gen_test(void) {
+    uint16_t token_start = ftell(ast_ptr);
+
+    // output start of test BC
+    fputc(BC_TEST, gen_ptr);
+
+    // count number of constants and output
+    uint8_t c = fgetc(ast_ptr);
+    uint16_t count = 0;
+    while (c != NULL) {
+        if (c == ' ') { count++; }
+        c = fgetc(ast_ptr);
+    }
+    fput16(count, gen_ptr);
+
+    // output constants
+    int8_t constant = 0;
+    int8_t sign = 1;
+    fseek(ast_ptr, token_start, 0);
+    c = fgetc(ast_ptr);
+    while (c != NULL) {
+        if (c == ' ') {
+            fputc(constant * sign, gen_ptr);
+            constant = 0;
+            sign = 1;
+         } else if (c == '-') {
+             sign = -1;
+         } else {
+             constant *= 10;
+             constant += (c - '0');
+         }
+        c = fgetc(ast_ptr);
+    }
+}
+
 
 static void gen_cast(void) {
     type_t to_type = cur_node.value_type;
@@ -384,6 +421,7 @@ void gen(FILE* src_ptr_arg, FILE* ast_ptr_arg, FILE* gen_ptr_arg) {
             case NT_VARIABLE: gen_variable(); break;
             case NT_CONSTANT: gen_constant(); break;
             case NT_CAST: gen_cast(); break;
+            case NT_TEST: gen_test(); break;
             default: assert(FALSE); break;
        }
     }
@@ -397,15 +435,15 @@ void gen(FILE* src_ptr_arg, FILE* ast_ptr_arg, FILE* gen_ptr_arg) {
 int main(int argc, char *argv[]) {
     assert(argc == 2);
 
-    char src_buffer[128] = { 0 };
+    char src_buffer[256] = { 0 };
     sprintf(src_buffer, "%s", argv[1]);
     src_ptr = fopen(src_buffer, "rb");
 
-    char ast_buffer[128] = { 0 };
+    char ast_buffer[256] = { 0 };
     sprintf(ast_buffer, "../bin/compilation/%s.ast", "out");
     ast_ptr = fopen(ast_buffer, "rb");
 
-    char gen_buffer[128] = { 0 };
+    char gen_buffer[256] = { 0 };
     sprintf(gen_buffer, "../bin/compilation/%s.gen", "out");
     gen_ptr = fopen(gen_buffer, "wb+");
 

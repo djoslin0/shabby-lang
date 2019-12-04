@@ -96,9 +96,7 @@ static void sg_declaration(uint8_t attempts) {
             assert(type_offset != NULL);
             pending = ast_get_param(ast_ptr, NT_CLASS, type_offset, NTP_CLASS_PENDING);
             is_type_ready = (pending == PENDING_FLAG_DIRTY);
-            printf("pending: %d, %d\n", pending, is_type_ready);
             if (is_type_ready) {
-                printf(" ready!\n");
                 size = ast_get_param(ast_ptr, NT_CLASS, type_offset, NTP_CLASS_BYTES);
             }
             break;
@@ -141,6 +139,7 @@ static void sg_declaration(uint8_t attempts) {
         }
         parent_offset = peeked_node.parent_offset;
     }
+
 }
 
 static void sg_statement(void) {
@@ -195,7 +194,7 @@ void symgen(FILE *ast_ptr_arg) {
 int main(int argc, char *argv[]) {
     assert(argc == 2);
 
-    char ast_buffer[128] = { 0 };
+    char ast_buffer[256] = { 0 };
     sprintf(ast_buffer, "../bin/compilation/%s.ast", "out");
     ast_ptr = fopen(ast_buffer, "r+b");
 

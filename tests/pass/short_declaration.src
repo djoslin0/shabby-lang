@@ -1,0 +1,27 @@
+short a;
+$TEST 0 0;
+
+short b = 257;
+$TEST 0 0 1 1;
+
+short c = -1;
+$TEST 1 1 -1 -1;
+
+short d = <byte> 257;
+$TEST -1 -1 1 0;
+
+short e = b + c;
+$TEST 1 0 0 1;
+
+short f = 32767;
+$TEST 0 1 -1 127;
+
+short h = f * -2;
+$TEST -1 127 2 0;
+
+byte i = 16;
+short j = i / 2 * 32;
+$TEST 0 16 0 1;
+
+short k = 8 * 32;
+$TEST 0 1 0 1;

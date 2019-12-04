@@ -75,6 +75,7 @@ static void ast_write_type(type_t type, uint16_t offset) {
 }
 
 static uint16_t insert_cast(type_t type, uint16_t parent_offset, uint16_t child_offset) {
+    assert(type != TYPE_USER_DEFINED && type != TYPE_NONE);
     ast_s node = { 0 };
     node.node_type = NT_CAST;
     node.parent_offset = parent_offset;
@@ -82,7 +83,7 @@ static uint16_t insert_cast(type_t type, uint16_t parent_offset, uint16_t child_
     node.value_type = type;
     printf("<inserted cast>\n");
     ast_insert_new_node(ast_ptr, &node);
-    fprintf(ast_ptr, "%s", node_constants[NT_CAST].name);
+    fprintf(ast_ptr, "%s", types[type].name);
     return node.offset;
 }
 
@@ -90,7 +91,7 @@ static uint16_t insert_cast(type_t type, uint16_t parent_offset, uint16_t child_
  // constant expression phase //
 ///////////////////////////////
 
-static void ce_propagate(uint32_t value) {
+static void ce_propagate(int32_t value) {
     ast_s node = cur_node;
     while (TRUE) {
         // search for parent that is type <term> or <expression> and has a <term_op> or a <expression_op>
@@ -127,7 +128,7 @@ static void ce_propagate(uint32_t value) {
         }
 
         // create scratch structure
-        if (cur_node.scratch == 0) {
+        if (node.scratch == 0) {
             on_scratch_index++;
             assert(on_scratch_index < MAX_SCRATCH);
             node.scratch = on_scratch_index;
@@ -373,6 +374,31 @@ static void tc_variable(void) {
         assert(found);
     }
 
+    // make sure we immediately cast if this variable is a smaller type than the parent declaration
+    // otherwise we can end up wrapping in an expression/term before casting
+    if (type != TYPE_USER_DEFINED) {
+        uint16_t next_offset = cur_node.parent_offset;
+        while (next_offset != NULL) {
+            ast_read_node(ast_ptr, next_offset, &peeked_node);
+            next_offset = peeked_node.parent_offset;
+            switch (peeked_node.node_type) {
+                case NT_FACTOR:
+                case NT_TERM:
+                case NT_EXPRESSION:
+                    continue;
+                default:
+                    next_offset = NULL;
+            }
+            if (peeked_node.node_type == NT_DECLARATION || peeked_node.node_type == NT_ASSIGNMENT) {
+                assert(peeked_node.value_type != TYPE_NONE);
+                if (peeked_node.value_type == TYPE_USER_DEFINED) { continue; }
+                if (peeked_node.value_type < type) { continue; }
+                uint16_t cast_offset = insert_cast(peeked_node.value_type, cur_node.parent_offset, cur_node.offset);
+                future_push(cast_offset);
+            }
+        }
+    }
+
     tc_propagate(type);
 }
 
@@ -572,7 +598,7 @@ void typecheck(FILE *ast_ptr_arg) {
 int main(int argc, char *argv[]) {
     assert(argc == 2);
 
-    char ast_buffer[128] = { 0 };
+    char ast_buffer[256] = { 0 };
     sprintf(ast_buffer, "../bin/compilation/%s.ast", "out");
     ast_ptr = fopen(ast_buffer, "r+b");
 

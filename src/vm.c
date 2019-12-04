@@ -173,6 +173,18 @@ static void vm_sub16(void) { exec_push16(exec_pop16() - exec_pop16()); }
 static void vm_mul16(void) { exec_push16(exec_pop16() * exec_pop16()); }
 static void vm_div16(void) { exec_push16(exec_pop16() / exec_pop16()); }
 
+static void vm_test(void) {
+    uint16_t count = fget16(bin_ptr);
+    assert(count <= exec_stack_count);
+    for (uint16_t i = exec_stack_count - count; i < exec_stack_count; i++) {
+        int8_t c = (int8_t)fgetc(bin_ptr);
+        if ((int8_t)exec_stack[i] != c) {
+            fprintf(stderr, "Test mismatch, expected: %d, got %d!\n", c, (int8_t)exec_stack[i]);
+        }
+        assert((int8_t)exec_stack[i] == c);
+    }
+}
+
 void vm(FILE* bin_ptr_arg) {
     bin_ptr = bin_ptr_arg;
 
@@ -185,7 +197,7 @@ void vm(FILE* bin_ptr_arg) {
 
     while (TRUE) {
         bytecode_t type = fgetc(bin_ptr);
-        if (type == (bytecode_t)EOF) { break; }
+        if ((uint8_t)type == (uint8_t)EOF) { break; }
 
         #ifdef DEBUG
             printf("%04X  ", (uint16_t)ftell(bin_ptr));
@@ -246,6 +258,9 @@ void vm(FILE* bin_ptr_arg) {
             case BC_MUL16: vm_mul16(); break;
             case BC_DIV16: vm_div16(); break;
 
+            // testing
+            case BC_TEST: vm_test(); break;
+
             // misc
             case BC_EOF: return;
 
@@ -268,7 +283,7 @@ void vm(FILE* bin_ptr_arg) {
 int main(int argc, char *argv[]) {
     assert(argc == 2);
 
-    char bin_buffer[128] = { 0 };
+    char bin_buffer[256] = { 0 };
     sprintf(bin_buffer, "../bin/compilation/%s.bin", "out");
     bin_ptr = fopen(bin_buffer, "rb");
 

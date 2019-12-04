@@ -145,6 +145,29 @@ static uint16_t output(node_t node_type, uint16_t parent_offset, uint8_t child_i
  // parsing functionality //
 ///////////////////////////
 
+static void parse_test(uint16_t parent_offset, uint8_t child_index) {
+    // <TEST> ::= $TEST <constant ...>
+    // output: [base node] <constant tokens>
+
+    // write base node
+    output(NT_TEST, parent_offset, child_index);
+    next_token();
+
+    while(cur_token[0] != ';') {
+        // validate constant
+        for (uint8_t i = 0; i < MAX_TOKEN_LEN; i++) {
+            if (cur_token[i] == NULL) { break; }
+            assert(is_numeric(cur_token[i]) || cur_token[i] == '-');
+        }
+
+        // output token
+        fputs(cur_token, ast_ptr);
+        if (cur_token[0] != '-') { fputc(' ', ast_ptr); }
+        next_token();
+    }
+    fputc(NULL, ast_ptr);
+}
+
 static void parse_cast(uint16_t parent_offset, uint8_t child_index) {
     // <cast> ::= '<' <type> '>' <factor>
     // output: [base node] <factor*> <token>
@@ -157,7 +180,7 @@ static void parse_cast(uint16_t parent_offset, uint8_t child_index) {
     }
 
     // write base node
-    uint8_t my_offset = output(NT_CAST, parent_offset, child_index);
+    uint16_t my_offset = output(NT_CAST, parent_offset, child_index);
 
     // output token
     fputs(cur_token, ast_ptr);
@@ -478,9 +501,9 @@ static void parse_declaration(uint16_t parent_offset, uint8_t child_index) {
 
 static void parse_statement(uint16_t parent_offset, uint8_t child_index, uint8_t flags) {
     // <statement> ::= <declaration | assignment> ';'
-    // output: [base node] <*next_statement> <*assignment | *declaration>
+    // output: [base node] <*next_statement> <*assignment | *declaration | *test>
 
-    if (!is_identifier(cur_token)) { return; }
+    if (!is_identifier(cur_token) && cur_token[0] != '$') { return; }
 
     // write base node
     uint16_t my_offset = output(NT_STATEMENT, parent_offset, child_index);
@@ -504,6 +527,14 @@ static void parse_statement(uint16_t parent_offset, uint8_t child_index, uint8_t
 
     // expect ';' at the end
     future_push(NT_CONSUME, NULL, NULL, ';');
+
+    // schedule test
+    if (cur_token[0] == '$' && cur_token[1] == NULL) {
+        next_token();
+        assert(!strcmp(cur_token, "TEST"));
+        future_push(NT_TEST, my_offset, 1, NULL);
+        return;
+    }
 
     // decide which type of statement it is
     char peeked_token[MAX_TOKEN_LEN+1];
@@ -623,6 +654,7 @@ void parse(FILE* src_ptr_arg, FILE* tok_ptr_arg, FILE* out_ptr_arg) {
             case NT_MEMBER: parse_member(n->parent_offset, n->child_index); break;
             case NT_CONSTANT: parse_constant(n->parent_offset, n->child_index); break;
             case NT_CAST: parse_cast(n->parent_offset, n->child_index); break;
+            case NT_TEST: parse_test(n->parent_offset, n->child_index); break;
             #ifdef DEBUG
             case NT_DEBUG_UNINDENT_NODE: INDENT(-1); break;
             #endif
@@ -639,15 +671,15 @@ void parse(FILE* src_ptr_arg, FILE* tok_ptr_arg, FILE* out_ptr_arg) {
 int main(int argc, char *argv[]) {
     assert(argc == 2);
 
-    char src_buffer[128] = { 0 };
+    char src_buffer[256] = { 0 };
     sprintf(src_buffer, "%s", argv[1]);
     src_ptr = fopen(src_buffer, "rb");
 
-    char tok_buffer[128] = { 0 };
+    char tok_buffer[256] = { 0 };
     sprintf(tok_buffer, "../bin/compilation/%s.tok", "out");
     tok_ptr = fopen(tok_buffer, "rb");
 
-    char ast_buffer[128] = { 0 };
+    char ast_buffer[256] = { 0 };
     sprintf(ast_buffer, "../bin/compilation/%s.ast", "out");
     ast_ptr = fopen(ast_buffer, "wb+");
 

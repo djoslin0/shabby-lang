@@ -99,7 +99,12 @@ void jump_resolution(FILE* gen_ptr_arg, FILE* bin_ptr_arg) {
         }
 
         // skip over params
-        uint16_t skip_amount = bytecode[type].params * bytecode[type].param_size;
+        uint16_t skip_amount = 0;
+        if (bytecode[type].params == BC_VARIABLE_PARAMS) {
+            skip_amount = fget16(gen_ptr);
+        } else {
+            skip_amount = bytecode[type].params * bytecode[type].param_size;
+        }
         fseek(bin_ptr, skip_amount, SEEK_CUR);
     }
     assert(bail < 1000);
@@ -112,11 +117,11 @@ void jump_resolution(FILE* gen_ptr_arg, FILE* bin_ptr_arg) {
 int main(int argc, char *argv[]) {
     assert(argc == 2);
 
-    char gen_buffer[128] = { 0 };
+    char gen_buffer[256] = { 0 };
     sprintf(gen_buffer, "../bin/compilation/%s.gen", "out");
     gen_ptr = fopen(gen_buffer, "rb");
 
-    char bin_buffer[128] = { 0 };
+    char bin_buffer[256] = { 0 };
     sprintf(bin_buffer, "../bin/compilation/%s.bin", "out");
     bin_ptr = fopen(bin_buffer, "wb+");
 

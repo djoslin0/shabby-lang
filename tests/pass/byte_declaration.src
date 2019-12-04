@@ -1,0 +1,21 @@
+byte a;
+$TEST 0;
+
+byte b = 10;
+$TEST 0 10;
+
+byte c = -1;
+$TEST 10 -1;
+
+byte d = <byte> 128;
+$TEST -1 -128;
+
+byte e = b + c;
+$TEST -128 9;
+
+byte f = 127;
+byte g = f * 2;
+$TEST 127 -2;
+
+byte h = f * -2;
+$TEST -2 2;

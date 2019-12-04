@@ -3,6 +3,8 @@
 
 #include "constants.h"
 
+#define BC_VARIABLE_PARAMS ((uint8_t)-1)
+
 typedef struct {
     uint8_t params;
     uint8_t param_size;
@@ -70,6 +72,9 @@ typedef enum {
     BC_DIV8,
     BC_DIV16,
 
+    // testing
+    BC_TEST,
+
     // misc
     BC_EOF = EOF,
 } bytecode_t;
@@ -132,6 +137,9 @@ static bytecode_s bytecode[] = {
 
     [BC_DIV8] = { 0, 0, DBG_STR("div8") },
     [BC_DIV16] = { 0, 0, DBG_STR("div16") },
+
+    // testing
+    [BC_TEST] = { BC_VARIABLE_PARAMS, BC_VARIABLE_PARAMS, DBG_STR("test") },
 };
 
 #endif

@@ -6,6 +6,9 @@ class foo {
 }
 foo bar;
 foo baz;
+byte zzz = 90;
 bar.a = 1;
 bar.b = 2;
 baz = bar;
+
+$TEST 10 1 2 0 1 2 0 90;

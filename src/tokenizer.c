@@ -123,11 +123,11 @@ void tokenize(FILE* ptr) {
 int main(int argc, char *argv[]) {
     assert(argc == 2);
 
-    char src_buffer[128] = { 0 };
+    char src_buffer[256] = { 0 };
     sprintf(src_buffer, "%s", argv[1]);
     src_ptr = fopen(src_buffer, "rb");
 
-    char tok_buffer[128] = { 0 };
+    char tok_buffer[256] = { 0 };
     sprintf(tok_buffer, "../bin/compilation/%s.tok", "out");
     tok_ptr = fopen(tok_buffer, "wb+");
 

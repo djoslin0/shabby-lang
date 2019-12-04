@@ -152,11 +152,11 @@ void graph(FILE *ast_ptr_arg, FILE *dot_ptr_arg) {
 int main(int argc, char *argv[]) {
     assert(argc == 2);
 
-    char ast_buffer[128] = { 0 };
+    char ast_buffer[256] = { 0 };
     sprintf(ast_buffer, "../bin/compilation/%s.ast", "out");
     ast_ptr = fopen(ast_buffer, "rb");
 
-    char dot_buffer[128] = { 0 };
+    char dot_buffer[256] = { 0 };
     sprintf(dot_buffer, "../bin/compilation/%s.dot", "out");
     dot_ptr = fopen(dot_buffer, "w+");
 
