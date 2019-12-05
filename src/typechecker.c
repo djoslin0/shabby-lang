@@ -374,31 +374,6 @@ static void tc_variable(void) {
         assert(found);
     }
 
-    // make sure we immediately cast if this variable is a smaller type than the parent declaration
-    // otherwise we can end up wrapping in an expression/term before casting
-    if (type != TYPE_USER_DEFINED) {
-        uint16_t next_offset = cur_node.parent_offset;
-        while (next_offset != NULL) {
-            ast_read_node(ast_ptr, next_offset, &peeked_node);
-            next_offset = peeked_node.parent_offset;
-            switch (peeked_node.node_type) {
-                case NT_FACTOR:
-                case NT_TERM:
-                case NT_EXPRESSION:
-                    continue;
-                default:
-                    next_offset = NULL;
-            }
-            if (peeked_node.node_type == NT_DECLARATION || peeked_node.node_type == NT_ASSIGNMENT) {
-                assert(peeked_node.value_type != TYPE_NONE);
-                if (peeked_node.value_type == TYPE_USER_DEFINED) { continue; }
-                if (peeked_node.value_type < type) { continue; }
-                uint16_t cast_offset = insert_cast(peeked_node.value_type, cur_node.parent_offset, cur_node.offset);
-                future_push(cast_offset);
-            }
-        }
-    }
-
     tc_propagate(type);
 }
 
@@ -447,12 +422,38 @@ failed_search:
     }
 }
 
-static void tc_term(void) {
-    if (cur_node.value_type == TYPE_NONE) { return; }
-    tc_propagate(cur_node.value_type);
-}
+static void tc_term_or_expression(void) {
+    // some operators can cause an overflow
+    // when one is used, we must use the bit width of a larger parent
+    bool is_constant_expression = (cur_node.scratch != 0) && (scratch[cur_node.scratch].constant_count == 2);
+    bool overflowable_operator = FALSE;
+    if (cur_node.children[1] != NULL) {
+        ast_read_node(ast_ptr, cur_node.children[1], &peeked_node);
+        char peeked_token[MAX_TOKEN_LEN+1];
+        ast_peek_token(ast_ptr, peeked_token);
+        switch (peeked_token[0]) {
+            case '+':
+            case '-':
+            case '*':
+                overflowable_operator = (peeked_token[1] == NULL);
+                break;
+            default: break;
+        }
+    }
 
-static void tc_expression(void) {
+    if (overflowable_operator && !is_constant_expression) {
+        uint16_t next_offset = cur_node.parent_offset;
+        while (next_offset != NULL) {
+            ast_read_node(ast_ptr, next_offset, &peeked_node);
+            next_offset = peeked_node.parent_offset;
+            if (peeked_node.node_type == NT_STATEMENT) { break; }
+            if (peeked_node.value_type == TYPE_NONE) { continue; }
+            ast_write_type(peeked_node.value_type, cur_node.offset);
+            cur_node.value_type = peeked_node.value_type;
+            break;
+        }
+    }
+
     if (cur_node.value_type == TYPE_NONE) { return; }
     tc_propagate(cur_node.value_type);
 }
@@ -510,8 +511,8 @@ static void tc_evaluate(void) {
             case NT_CLASS: tc_class(); break;
             case NT_DECLARATION: tc_declaration(); break;
             case NT_ASSIGNMENT: tc_assignment(); break;
-            case NT_EXPRESSION: tc_expression(); break;
-            case NT_TERM: tc_term(); break;
+            case NT_EXPRESSION: tc_term_or_expression(); break;
+            case NT_TERM: tc_term_or_expression(); break;
             case NT_VARIABLE: tc_variable(); break;
             case NT_CONSTANT: tc_constant(); break;
             case NT_CAST: tc_cast(); break;
